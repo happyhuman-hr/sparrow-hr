@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ขอลา / OT — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:ital,wght@0,500;1,500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<meta name="theme-color" content="#7a1c2b">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main id="main"></main>
+<script src="config.js"></script>
+<script src="js/app.js"></script>
+<script>
+/* ฟอร์มขอลา (ตรวจสิทธิ์ตามข้อบังคับฯ ก่อนส่ง) และฟอร์มขอ OT / ทำงานวันหยุด (ใช้แทนแบบ HR-F-09) */
+App.boot({ page: 'leave', ready: function (me) {
+  var main = App.$('#main'), today = me.now.date, tab = App.params.get('tab') || 'leave';
+  var wrap = App.h('<div class="wrap narrow"></div>'); main.appendChild(wrap);
+  var policies = [], balances = {};
+
+  Promise.all([App.call('leavePolicies'), App.call('leaveBalances')]).then(function (r) {
+    policies = r[0]; r[1].forEach(function (b) { balances[b.type] = b; }); render();
+  }).catch(function () {});
+
+  /** ข้อความสิทธิ์ของแต่ละประเภท */
+  function quotaText(b) {
+    if (!b) return '-';
+    if (!b.eligible) return 'ยังไม่มีสิทธิ์';
+    if (!+b.quota) return b.type === 'sterilization' ? 'ตามแพทย์กำหนด' : 'ไม่กำหนด';
+    return b.quota + ' วัน';
+  }
+  function remainText(b) { return !b ? '-' : !b.eligible ? '0' : !+b.quota ? '-' : String(b.remaining); }
+
+  /** ตารางสิทธิ์วันลาปีนี้ (กดแถวเพื่อเลือกประเภท) */
+  function balanceTable(selected) {
+    return '<div class="card"><h2>สิทธิ์วันลาปีนี้</h2><div class="tbl-wrap"><table><thead><tr><th>ประเภท</th><th class="num">สิทธิ์</th><th class="num">ใช้ไปแล้ว</th><th class="num">รออนุมัติ</th><th class="num">คงเหลือ</th></tr></thead><tbody>' +
+      policies.map(function (p) {
+        var b = balances[p.type];
+        return '<tr class="click' + (p.type === selected ? ' sel' : '') + '" data-pick="' + p.type + '"><td><b>' + App.esc(p.name) + '</b><div class="sub">' + App.esc(p.paid || '') + '</div></td>' +
+          '<td class="num">' + quotaText(b) + '</td><td class="num">' + (b ? b.used : 0) + '</td><td class="num">' + (b && b.pending ? b.pending : '-') + '</td>' +
+          '<td class="num"><b>' + remainText(b) + '</b></td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      (balances.annual && !balances.annual.eligible ? '<p class="sub">ลาพักร้อน: ' + App.esc(balances.annual.note) + '</p>' : '') + '</div>';
+  }
+
+  function render() {
+    wrap.innerHTML = '<div class="row" style="margin-bottom:12px"><div class="seg"><button data-t="leave" class="' + (tab === 'leave' ? 'on' : '') + '">ขอลา</button>' +
+      '<button data-t="ot" class="' + (tab === 'ot' ? 'on' : '') + '">ขอ OT / ทำงานวันหยุด</button></div></div><div id="body"></div>';
+    App.$$('[data-t]', wrap).forEach(function (b) { b.onclick = function () { tab = b.getAttribute('data-t'); render(); }; });
+    tab === 'leave' ? leaveForm() : otForm();
+  }
+
+  function leaveForm() {
+    var body = App.$('#body');
+    body.innerHTML = balanceTable(policies[0] && policies[0].type) + '<div class="card"><h2>ยื่นใบลา</h2>' +
+      '<div class="field"><label>ประเภทการลา</label><select id="type">' + policies.map(function (p) { return '<option value="' + p.type + '">' + App.esc(p.name) + '</option>'; }).join('') + '</select><div class="sub" id="pnote"></div></div>' +
+      '<div class="grid g4" id="quota" style="margin-bottom:12px"></div>' +
+      '<div class="grid g2"><div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="s" value="' + today + '"></div><div class="field"><label>ถึงวันที่</label><input type="date" id="e" value="' + today + '"></div></div>' +
+      '<div class="field"><label>ช่วงเวลา (กรณีลา 1 วัน)</label><div class="seg" id="half"><button data-h="none" class="on">ทั้งวัน</button><button data-h="am">ครึ่งเช้า</button><button data-h="pm">ครึ่งบ่าย</button></div></div>' +
+      '<div class="field"><label>เหตุผล</label><textarea id="reason" placeholder="เช่น ไข้หวัด / ติดต่อราชการ / งานแต่งพี่สาว"></textarea></div>' +
+      '<div class="field"><label>แนบเอกสาร (ใบรับรองแพทย์ ฯลฯ)</label><input type="file" id="file" accept="image/*,application/pdf"></div>' +
+      '<div id="preview"></div><button class="accent" id="send" style="width:100%">ส่งใบลา</button></div>';
+    var half = 'none';
+    App.$$('#half button').forEach(function (b) { b.onclick = function (ev) { ev.preventDefault(); half = b.getAttribute('data-h'); App.$$('#half button').forEach(function (x) { x.classList.toggle('on', x === b); }); preview(); }; });
+    App.$$('[data-pick]', body).forEach(function (tr) { tr.onclick = function () { App.$('#type').value = tr.getAttribute('data-pick'); preview(); App.$('#type').scrollIntoView({ behavior: 'smooth', block: 'center' }); }; });
+    ['type', 's', 'e', 'file'].forEach(function (id) { App.$('#' + id).onchange = function () { if (id === 's' && App.$('#e').value < App.$('#s').value) App.$('#e').value = App.$('#s').value; preview(); }; });
+    var timer;
+    function preview() {
+      var p = policies.filter(function (x) { return x.type === App.$('#type').value; })[0];
+      App.$('#pnote').textContent = p ? [p.paid, p.note].filter(Boolean).join(' · ') : '';
+      var b = balances[App.$('#type').value];
+      App.$$('[data-pick]').forEach(function (tr) { tr.classList.toggle('sel', tr.getAttribute('data-pick') === App.$('#type').value); });
+      App.$('#quota').innerHTML = q(quotaText(b), 'สิทธิ์ต่อปี', '') + q(b ? b.used : 0, 'ใช้ไปแล้ว', '') + q(b && b.pending ? b.pending : 0, 'รออนุมัติ', 'warn') + q(remainText(b), 'คงเหลือ', 'ok');
+      if (App.$('#s').value !== App.$('#e').value && half !== 'none') { half = 'none'; App.$$('#half button').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-h') === 'none'); }); }
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        App.call('leavePreview', payload()).then(function (r) {
+          var b = r.balance, after = b && b.eligible && +b.quota ? b.remaining - (b.pending || 0) - r.days : null;
+          App.$('#preview').innerHTML = '<p>ลาครั้งนี้ <b>' + r.days + ' วัน</b> <span class="sub">(นับเฉพาะวันที่มีกะทำงาน)</span>' +
+            (after !== null ? '<br>ถ้าอนุมัติ จะเหลือสิทธิ์ <b' + (after < 0 ? ' style="color:var(--bad)"' : '') + '>' + after + ' วัน</b>' + (b.pending ? ' <span class="sub">(หักรายการที่รออนุมัติ ' + b.pending + ' วันแล้ว)</span>' : '') : '') + '</p>' +
+            (r.warnings.length ? '<div class="warnbox">⚠️ ' + r.warnings.map(App.esc).join('<br>⚠️ ') + '<br><span class="sub">ส่งได้ แต่หัวหน้าจะเห็นคำเตือนนี้</span></div>' : '');
+        }).catch(function () {});
+      }, 250);
+    }
+    function payload() { return { type: App.$('#type').value, startDate: App.$('#s').value, endDate: App.$('#e').value, half: half, reason: App.$('#reason').value.trim(), hasFile: !!App.$('#file').files[0] }; }
+    App.$('#send').onclick = function () {
+      var btn = this; btn.disabled = true; btn.textContent = 'กำลังส่ง…';
+      App.fileToBase64(App.$('#file').files[0], 1600).then(function (f) {
+        var p = payload(); p.file = f; return App.call('leaveCreate', p);
+      }).then(function () {
+        App.toast('ส่งใบลาแล้ว รอหัวหน้าอนุมัติ'); setTimeout(function () { location.href = App.link('my.html'); }, 900);
+      }).catch(function () { btn.disabled = false; btn.textContent = 'ส่งใบลา'; });
+    };
+    preview();
+  }
+
+  function q(n, l, cls) { return '<div class="stat ' + cls + '" style="padding:8px 10px"><div class="n" style="font-size:22px">' + n + '</div><div class="l">' + l + '</div></div>'; }
+
+  function otForm() {
+    var body = App.$('#body');
+    body.innerHTML = '<div class="card"><p class="sub" style="margin-top:0">ร้านจ่ายค่าล่วงเวลา/ค่าทำงานวันหยุดเฉพาะที่ได้รับอนุมัติ และคิดไม่เกินเวลาที่อยู่ทำงานจริงตามบันทึกเข้า-ออก</p>' +
+      '<div class="field"><label>ประเภท</label><div class="seg" id="kind"><button data-k="ot" class="on">OT หลังเลิกกะ</button><button data-k="holiday">ทำงานในวันหยุด</button></div></div>' +
+      '<div class="grid g2"><div class="field"><label>วันที่</label><input type="date" id="d" value="' + today + '"></div>' +
+      '<div class="field"><label>จำนวน (ชั่วโมง : นาที)</label><div class="row" style="gap:6px;flex-wrap:nowrap"><input type="number" id="h" min="0" max="12" step="1" value="1" style="width:80px"> ชม. <input type="number" id="mi" min="0" max="59" step="1" value="0" style="width:80px"> นาที</div></div></div>' +
+      '<div class="field"><label>เหตุผล / งานที่ทำ</label><textarea id="r" placeholder="เช่น จัดเลี้ยงกลุ่ม 30 ท่าน"></textarea></div>' +
+      '<button class="accent" id="send" style="width:100%">ส่งคำขอ</button></div>';
+    var kind = 'ot';
+    App.$$('#kind button').forEach(function (b) { b.onclick = function (ev) { ev.preventDefault(); kind = b.getAttribute('data-k'); App.$$('#kind button').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
+    App.$('#send').onclick = function () {
+      var btn = this; btn.disabled = true;
+      App.call('otCreate', { date: App.$('#d').value, hours: (+App.$('#h').value || 0) + (+App.$('#mi').value || 0) / 60, kind: kind, reason: App.$('#r').value.trim() })
+        .then(function () { App.toast('ส่งคำขอแล้ว'); setTimeout(function () { location.href = App.link('my.html'); }, 900); })
+        .catch(function () { btn.disabled = false; });
+    };
+  }
+} });
+</script>
+</body>
+</html>

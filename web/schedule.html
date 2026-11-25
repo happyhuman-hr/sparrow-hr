@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ตารางกะ — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:ital,wght@0,500;1,500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<meta name="theme-color" content="#7a1c2b">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main id="main"></main>
+<script src="config.js"></script>
+<script src="js/app.js"></script>
+<script>
+/*
+ * แท็บ "ตารางกะ": จัดกะรายสัปดาห์ (พนักงาน × วัน) · คัดลอกจากสัปดาห์ก่อน
+ * แท็บ "วันหยุดตามประเพณี": กำหนดแต่ละวันว่า หยุดวันนั้น / ทำงานแล้วหยุดชดเชย / ทำงานรับค่าวันหยุด และกำหนดรายคนได้
+ */
+App.boot({ page: 'schedule', role: 'manager', ready: function (me) {
+  var main = App.$('#main'), wrap = App.h('<div class="wrap"></div>'); main.appendChild(wrap);
+  var tab = App.params.get('tab') || 'shift', week = App.weekStart(me.now.date), year = +me.now.date.slice(0, 4);
+  var MODE = { dayoff: 'หยุดวันนั้น (Day off)', substitute: 'ทำงาน → หยุดชดเชยวันอื่น', paid: 'ทำงาน รับค่าทำงานวันหยุด' };
+
+  function frame() {
+    wrap.innerHTML = '<div class="row" style="margin-bottom:12px"><h1 style="flex:1">ตารางกะ & วันหยุด</h1><div class="seg"><button data-t="shift" class="' + (tab === 'shift' ? 'on' : '') + '">ตารางกะ</button>' +
+      '<button data-t="hol" class="' + (tab === 'hol' ? 'on' : '') + '">วันหยุดตามประเพณี</button></div></div><div id="body"></div>';
+    App.$$('[data-t]', wrap).forEach(function (b) { b.onclick = function () { tab = b.getAttribute('data-t'); frame(); }; });
+    tab === 'shift' ? loadWeek() : loadHol();
+  }
+
+  // ---------------------------------------------------------------- ตารางกะ
+  var pending = {};
+  function loadWeek() { pending = {}; App.loading(App.$('#body')); App.call('schedule', { weekStart: week }).then(renderWeek).catch(function () {}); }
+  function renderWeek(d) {
+    var body = App.$('#body'), hol = {}; d.holidays.forEach(function (h) { hol[h.date] = h; });
+    var label = function (c) { return c === 'OFF' ? 'หยุด' : c ? c + ' ' + ((d.shifts.filter(function (s) { return s.code === c; })[0] || {}).start || '') : '—'; };
+    // ตัวเลือกแรก = ใช้กะประจำ (ไม่แก้รายวัน) · ตัวเลือกอื่น = แก้เฉพาะวันนั้น
+    var opts = function (def) { return '<option value="">' + label(def) + ' (ประจำ)</option><option value="OFF">หยุด</option>' + d.shifts.map(function (s) { return '<option value="' + s.code + '">' + s.code + ' ' + s.start + '</option>'; }).join(''); };
+    var DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+    body.innerHTML = '<div class="row" style="margin-bottom:10px"><button class="sm" id="pw">‹ สัปดาห์ก่อน</button><b style="flex:1;text-align:center">' + App.dateTH(d.days[0]) + ' – ' + App.dateTH(d.days[6]) + '</b><button class="sm" id="nw">สัปดาห์ถัดไป ›</button></div>' +
+      '<div class="tbl-wrap"><table class="sched"><thead><tr><th>พนักงาน</th>' + d.days.map(function (x) {
+        var wd = new Date(x + 'T00:00:00Z').getUTCDay();
+        return '<th class="' + (hol[x] ? 'hol' : '') + '">' + App.TH_DOW[wd] + ' ' + (+x.slice(8)) + (hol[x] ? '<span class="note">' + App.esc(hol[x].name) + '</span>' : '') + '</th>';
+      }).join('') + '</tr></thead><tbody>' + d.employees.map(function (e) {
+        var off = String(e.offDays || '').split(',').filter(Boolean).map(function (k) { return DOW[+k]; }).join(',');
+        return '<tr><td><b>' + App.esc(e.name) + '</b><div class="sub">' + App.esc(e.position || '') + '</div>' +
+          '<div class="defs">ประจำ: <b>' + (e.defaultShift || '-') + '</b>' + (off ? ' · หยุด ' + off : '') + (e.halfDayOn !== '' ? ' · ครึ่งวัน' + DOW[+e.halfDayOn] : '') + (d.canEditDefault ? ' <a href="#" data-def="' + e.id + '">แก้</a>' : '') + '</div></td>' + d.days.map(function (x) {
+          var v = d.cells[e.id + '|' + x] || '', inf = d.info[e.id + '|' + x], def = d.defaults[e.id + '|' + x] || '';
+          var note = inf ? (inf.kind === 'holiday' ? 'หยุดตามประเพณี' : inf.kind === 'sub_off' ? 'หยุดชดเชย' : inf.leave ? inf.leave : inf.pending ? inf.pending : inf.holiday && inf.holiday.mode !== 'dayoff' ? 'ทำงานวันหยุด' : '') : '';
+          var cur = v || def;
+          return '<td><select data-e="' + e.id + '" data-d="' + x + '" class="v-' + cur + (v ? ' manual' : '') + '" title="' + (v ? 'แก้รายวัน (กะประจำ: ' + label(def) + ')' : 'ตามกะประจำ') + '">' + opts(def).replace('value="' + v + '"', 'value="' + v + '" selected') + '</select>' + (note ? '<span class="note">' + App.esc(note) + '</span>' : '') + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="row" style="margin-top:12px"><span class="sub">' + d.shifts.map(function (s) { return '<b>' + s.code + '</b> ' + s.start + '–' + s.end; }).join(' · ') + '</span><div class="spacer"></div>' +
+      '<button id="copy">คัดลอกจากสัปดาห์ก่อน</button><button class="accent" id="save" disabled>บันทึก</button></div>' +
+      '<p class="sub">ทุกช่องเริ่มจาก <b>กะประจำ</b> ของแต่ละคน (เจ้าของร้าน / HR ตั้งได้ที่ปุ่ม "แก้" ใต้ชื่อ หรือในแฟ้มพนักงาน) · ถ้าวันไหนเปลี่ยน เลือกกะใหม่เฉพาะวันนั้นได้ ช่องที่แก้รายวันจะมีกรอบสีไวน์ · เลือก "(ประจำ)" เพื่อกลับไปใช้กะประจำ</p>' +
+      '<p class="sub">ข้อบังคับฯ: หยุดวันจันทร์ 1 วัน + อีก 1 วันสลับระหว่างอังคาร–พฤหัสบดี · พนักงานเห็นกะของตัวเองในเมนู "ปฏิทิน"</p>';
+    App.$$('[data-def]', body).forEach(function (a) { a.onclick = function (ev) { ev.preventDefault(); editDefault(d, d.employees.filter(function (e) { return e.id === a.getAttribute('data-def'); })[0]); }; });
+    App.$$('select[data-e]', body).forEach(function (s) { s.onchange = function () {
+      pending[s.getAttribute('data-e') + '|' + s.getAttribute('data-d')] = s.value; s.className = 'v-' + (s.value || d.defaults[s.getAttribute('data-e') + '|' + s.getAttribute('data-d')]) + (s.value ? ' manual' : '') + ' changed'; App.$('#save').disabled = false;
+    }; });
+    App.$('#pw').onclick = function () { if (leaveOk()) { week = App.addDays(week, -7); loadWeek(); } };
+    App.$('#nw').onclick = function () { if (leaveOk()) { week = App.addDays(week, 7); loadWeek(); } };
+    App.$('#save').onclick = function () {
+      var changes = Object.keys(pending).map(function (k) { var p = k.split('|'); return { empId: p[0], date: p[1], shift: pending[k] }; });
+      this.disabled = true;
+      App.call('scheduleSet', { changes: changes }).then(function () { App.toast('บันทึกตารางกะแล้ว'); loadWeek(); }).catch(function () { App.$('#save').disabled = false; });
+    };
+    App.$('#copy').onclick = function () {
+      if (!confirm('คัดลอกกะจากสัปดาห์ก่อนมาทับสัปดาห์นี้?')) return;
+      App.call('scheduleCopyWeek', { weekStart: week }).then(function (r) { App.toast('คัดลอก ' + r.count + ' ช่อง'); loadWeek(); }).catch(function () {});
+    };
+  }
+  /** ตั้งกะประจำ + วันหยุดประจำสัปดาห์ (เจ้าของร้าน / HR) */
+  function editDefault(d, e) {
+    var DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'], on = String(e.offDays || '').split(',');
+    var m = App.modal('กะประจำของ ' + e.name,
+      '<div class="card"><div class="field"><label>กะประจำ</label><select id="ds"><option value="">— ไม่กำหนด —</option>' +
+        d.shifts.map(function (s) { return '<option value="' + s.code + '"' + (s.code === e.defaultShift ? ' selected' : '') + '>' + s.code + ' · ' + s.start + '–' + s.end + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label>วันหยุดประจำสัปดาห์</label><div class="seg" id="dd">' + [1, 2, 3, 4, 5, 6, 0].map(function (k) { return '<button type="button" data-d="' + k + '" class="' + (on.indexOf(String(k)) >= 0 ? 'on' : '') + '">' + DOW[k] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="field"><label>วันทำงานครึ่งวัน (กะ H 15:00–22:00)</label><select id="dh"><option value="">ไม่มี</option>' + [1, 2, 3, 4, 5, 6, 0].map(function (k) { return '<option value="' + k + '"' + (String(e.halfDayOn) === String(k) ? ' selected' : '') + '>' + DOW[k] + '</option>'; }).join('') + '</select>' +
+        '<div class="sub">ข้อบังคับฯ: แม่บ้านทำงาน 5.5 วัน/สัปดาห์ (ครึ่งวัน 1 วัน) · ครัว/ต้อนรับ 5 วัน ไม่ต้องเลือก</div></div>' +
+      '<p class="sub">มีผลกับทุกวันที่ยังไม่ได้แก้รายวัน (รวมวันข้างหน้าทั้งหมด) · วันที่แก้รายวันไว้แล้วจะคงเดิม</p>' +
+      '<div class="row"><div class="spacer"></div><button class="accent" id="dsave">บันทึกกะประจำ</button></div></div>');
+    App.$$('#dd button', m.el).forEach(function (b) { b.onclick = function () { b.classList.toggle('on'); }; });
+    App.$('#dsave', m.el).onclick = function () {
+      var off = App.$$('#dd button.on', m.el).map(function (b) { return b.getAttribute('data-d'); }).join(',');
+      App.call('defaultShiftSave', { empId: e.id, shift: App.$('#ds', m.el).value, offDays: off, halfDayOn: App.$('#dh', m.el).value }).then(function () { App.toast('บันทึกกะประจำแล้ว'); m.close(); loadWeek(); }).catch(function () {});
+    };
+  }
+  function leaveOk() { return !Object.keys(pending).length || confirm('ยังไม่ได้บันทึกการเปลี่ยนแปลง ออกจากสัปดาห์นี้?'); }
+
+  // ---------------------------------------------------------------- วันหยุดตามประเพณี
+  function loadHol() { App.loading(App.$('#body')); App.call('holidays', { year: year }).then(renderHol).catch(function () {}); }
+  function renderHol(d) {
+    var body = App.$('#body');
+    body.innerHTML = '<div class="row" style="margin-bottom:10px"><button class="sm" id="py">‹</button><b style="flex:1;text-align:center">ปี ' + (year + 543) + ' · ' + d.holidays.length + ' วัน</b><button class="sm" id="ny">›</button></div>' +
+      '<p class="sub">ข้อบังคับฯ กำหนดวันหยุดตามประเพณี 13 วัน (รวมวันแรงงาน) ประกาศเป็นปี ๆ · วันที่ร้านต้องเปิด ตกลงกับพนักงานให้สลับไปหยุดชดเชยวันอื่นได้ โดยต้องตกลงล่วงหน้าอย่างน้อย 7 วันทำการ</p>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>วันที่</th><th>วันหยุด</th><th>สถานะ (ทุกคน)</th><th>หยุดชดเชย</th><th>กำหนดรายคน</th>' + (d.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>' +
+      d.holidays.map(function (h, i) {
+        var sw = d.swaps.filter(function (s) { return s.holidayDate === h.date; });
+        return '<tr><td>' + App.dateTH(h.date, { dow: true }) + '</td><td><b>' + App.esc(h.name) + '</b>' + (h.note ? '<div class="sub">' + App.esc(h.note) + '</div>' : '') + '</td>' +
+          '<td><span class="badge ' + (h.mode === 'dayoff' ? 'b-holiday' : 'b-late') + '">' + MODE[h.mode || 'dayoff'] + '</span></td>' +
+          '<td>' + (h.mode === 'substitute' ? App.dateTH(h.substituteDate, { dow: true }) : '-') + '</td>' +
+          '<td>' + (sw.length ? sw.map(function (s) { return '<div>' + App.esc(s.name) + ': ' + MODE[s.mode] + (s.substituteDate ? ' → ' + App.dateTH(s.substituteDate) : '') + '</div>'; }).join('') : '<span class="sub">-</span>') + '</td>' +
+          (d.canEdit ? '<td><button class="sm" data-i="' + i + '">แก้ไข</button></td>' : '') + '</tr>';
+      }).join('') + '</tbody></table></div>' +
+      (d.canEdit ? '<div class="row" style="margin-top:12px"><div class="spacer"></div><button class="accent" id="addh">+ เพิ่มวันหยุด</button></div>' : '');
+    App.$('#py').onclick = function () { year--; loadHol(); };
+    App.$('#ny').onclick = function () { year++; loadHol(); };
+    if (App.$('#addh')) App.$('#addh').onclick = function () { edit(d, { date: year + '-01-01', name: '', mode: 'dayoff' }, true); };
+    App.$$('[data-i]', body).forEach(function (b) { b.onclick = function () { edit(d, d.holidays[+b.getAttribute('data-i')], false); }; });
+  }
+
+  function modeSeg(name, cur) {
+    return '<div class="grid" style="gap:6px">' + Object.keys(MODE).map(function (k) {
+      return '<label style="display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px"><input type="radio" name="' + name + '" value="' + k + '" style="width:auto"' + (k === cur ? ' checked' : '') + '>' + MODE[k] + '</label>';
+    }).join('') + '</div>';
+  }
+
+  function edit(d, h, isNew) {
+    var sw = d.swaps.filter(function (s) { return s.holidayDate === h.date; });
+    var m = App.modal(isNew ? 'เพิ่มวันหยุดตามประเพณี' : h.name,
+      '<div class="card"><div class="grid g2"><div class="field"><label>วันที่</label><input type="date" id="hd" value="' + h.date + '"></div><div class="field"><label>ชื่อวันหยุด</label><input id="hn" value="' + App.esc(h.name) + '"></div></div>' +
+      '<div class="field"><label>สถานะสำหรับพนักงานทุกคน</label>' + modeSeg('hm', h.mode || 'dayoff') + '</div>' +
+      '<div class="field" id="subw"><label>วันหยุดชดเชย</label><input type="date" id="hs" value="' + (h.substituteDate || '') + '"></div>' +
+      '<div class="field"><label>หมายเหตุ</label><input id="hnote" value="' + App.esc(h.note || '') + '"></div>' +
+      '<div class="row">' + (isNew ? '' : '<button class="bad sm" id="del">ลบวันหยุดนี้</button>') + '<div class="spacer"></div><button class="accent" id="hsave">บันทึก</button></div></div>' +
+      (isNew ? '' : '<div class="card"><h3>กำหนดรายคน (แตกต่างจากสถานะของทุกคน)</h3>' +
+        (sw.length ? sw.map(function (s) { return '<div class="item"><div class="grow"><b>' + App.esc(s.name) + '</b><div class="sub">' + MODE[s.mode] + (s.substituteDate ? ' → หยุดชดเชย ' + App.dateTH(s.substituteDate, { dow: true }) : '') + '</div></div><button class="sm bad" data-del="' + s.empId + '">ลบ</button></div>'; }).join('') : '<p class="sub">ยังไม่มี</p>') +
+        '<div class="hr"></div><div class="field"><label>พนักงาน</label><select id="se">' + d.employees.map(function (e) { return '<option value="' + e.id + '">' + App.esc(e.name) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field">' + modeSeg('sm', 'substitute') + '</div><div class="field" id="ssw"><label>วันหยุดชดเชย</label><input type="date" id="ss"></div>' +
+        '<div class="row"><div class="spacer"></div><button id="ssave">เพิ่มการกำหนดรายคน</button></div></div>'));
+    function toggle() {
+      var hm = App.$('input[name=hm]:checked', m.el).value; App.$('#subw', m.el).style.display = hm === 'substitute' ? '' : 'none';
+      var smEl = App.$('input[name=sm]:checked', m.el); if (smEl) App.$('#ssw', m.el).style.display = smEl.value === 'substitute' ? '' : 'none';
+    }
+    App.$$('input[type=radio]', m.el).forEach(function (r) { r.onchange = toggle; }); toggle();
+    function done(r, msg) { if (r && r.warning) alert('⚠️ ' + r.warning); App.toast(msg); m.close(); loadHol(); }
+    App.$('#hsave', m.el).onclick = function () {
+      App.call('holidaySave', { originalDate: isNew ? '' : h.date, holiday: { date: App.$('#hd', m.el).value, name: App.$('#hn', m.el).value.trim(), mode: App.$('input[name=hm]:checked', m.el).value,
+        substituteDate: App.$('#hs', m.el).value, note: App.$('#hnote', m.el).value.trim() } }).then(function (r) { done(r, 'บันทึกวันหยุดแล้ว'); }).catch(function () {});
+    };
+    if (App.$('#del', m.el)) App.$('#del', m.el).onclick = function () { if (confirm('ลบวันหยุดนี้?')) App.call('holidayDelete', { date: h.date }).then(function () { done(null, 'ลบแล้ว'); }).catch(function () {}); };
+    if (App.$('#ssave', m.el)) App.$('#ssave', m.el).onclick = function () {
+      App.call('swapSave', { swap: { holidayDate: h.date, empId: App.$('#se', m.el).value, mode: App.$('input[name=sm]:checked', m.el).value, substituteDate: App.$('#ss', m.el).value } })
+        .then(function (r) { done(r, 'บันทึกแล้ว'); }).catch(function () {});
+    };
+    App.$$('[data-del]', m.el).forEach(function (b) { b.onclick = function () { App.call('swapDelete', { holidayDate: h.date, empId: b.getAttribute('data-del') }).then(function () { done(null, 'ลบแล้ว'); }).catch(function () {}); }; });
+  }
+
+  frame();
+} });
+</script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:ital,wght@0,500;1,500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<meta name="theme-color" content="#7a1c2b">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  .tip { position: fixed; pointer-events: none; background: var(--ink); color: #fff; font-size: 12.5px; padding: 8px 10px; border-radius: 8px; z-index: 70; line-height: 1.45; display: none; }
+  .tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+  .flag { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<main id="main"></main>
+<div class="tip" id="tip"></div>
+<script src="config.js"></script>
+<script src="js/app.js"></script>
+<script>
+/* ภาพรวมของผู้บริหาร: วันนี้ · แนวโน้มรายวัน · สรุปรายคนรายเดือน · กดดูรายคน · แก้เวลา (HR) · ส่งออก CSV */
+App.boot({ page: 'dashboard', role: 'manager', ready: function (me) {
+  var main = App.$('#main'), wrap = App.h('<div class="wrap"></div>'); main.appendChild(wrap);
+  var month = App.params.get('month') || me.now.date.slice(0, 7), data = null, sortKey = 'name';
+  var SERIES = [['present', 'ตรงเวลา', 'var(--ok)'], ['late', 'สาย', 'var(--warn)'], ['absent', 'ขาด', 'var(--bad)'], ['leave', 'ลา', 'var(--info)']];
+
+  function load() { App.loading(wrap); App.call('dashboard', { month: month }).then(function (d) { data = d; render(); }).catch(function () {}); }
+
+  function render() {
+    var d = data, t = d.today, names = {}; d.policies.forEach(function (p) { names[p.type] = p.name; });
+    var tot = d.rows.reduce(function (a, r) { var s = r.summary; ['late', 'lateMin', 'absent', 'leaveDays', 'otMin', 'holidayWorkMin', 'holidayOtMin', 'unapprovedMin', 'otPay', 'incomplete'].forEach(function (k) { a[k] = (a[k] || 0) + (+s[k] || 0); }); return a; }, {});
+    var over = d.rows.filter(function (r) { return r.lateYear > d.lateLimit; });
+    wrap.innerHTML =
+      '<div class="row" style="margin-bottom:12px"><div><h1>Dashboard</h1><div class="sub">อัปเดต ' + App.dateTH(d.now.date, { dow: true }) + ' ' + d.now.time.slice(0, 5) + ' น.</div></div><div class="spacer"></div>' +
+        (App.can('hr') ? '<a class="btn sm" href="' + App.link('payroll.html') + '">💰 รายงานเงินเดือน</a>' : '') + '</div>' +
+      '<h2>วันนี้</h2><div class="grid g4" style="margin-bottom:10px">' +
+        stat(t.present + t.late, 'มาทำงานแล้ว', 'ok') + stat(t.late, 'มาสาย', t.late ? 'warn' : '') +
+        stat(t.notIn + t.absent, 'ยังไม่เข้างาน / ขาด', t.notIn + t.absent ? 'bad' : '') + stat(t.leave + t.off, 'ลา / วันหยุด', 'info') + '</div>' +
+      '<div class="tbl-wrap" style="margin-bottom:18px"><table><thead><tr><th>พนักงาน</th><th>กะ</th><th>สถานะ</th><th>เข้า</th><th>ออก</th><th>หมายเหตุ</th></tr></thead><tbody>' +
+        t.list.map(function (x) {
+          return '<tr class="click" data-emp="' + x.empId + '"><td>' + App.esc(x.name) + '</td><td>' + (x.shift || '-') + '</td><td>' + App.statusBadge(x.status) + (x.lateMin ? ' <span class="sub">' + App.fmtMin(x.lateMin) + '</span>' : '') + '</td>' +
+            '<td>' + App.t5(x.inTime) + '</td><td>' + App.t5(x.outTime) + '</td><td class="sub">' + App.esc(x.note || '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+
+      '<div class="row" style="margin-bottom:10px"><button class="sm" id="pm">‹</button><h2 style="margin:0;flex:1;text-align:center">' + App.monthTH(d.month) + '</h2><button class="sm" id="nm">›</button></div>' +
+      '<div class="grid g4" style="margin-bottom:10px">' +
+        stat(tot.late, 'ครั้งที่มาสาย (' + App.fmtMin(tot.lateMin) + ')', tot.late ? 'warn' : '') + stat(tot.absent, 'วันขาดงาน', tot.absent ? 'bad' : '') +
+        stat(App.fmtMin(tot.otMin + tot.holidayOtMin + tot.holidayWorkMin), 'OT / ทำงานวันหยุด (อนุมัติ)', 'info') +
+        (d.showPay ? stat('฿' + App.num(tot.otPay), 'ค่า OT โดยประมาณ', '') : stat(tot.leaveDays, 'วันลารวม', '')) + '</div>' +
+      (tot.unapprovedMin >= 1 || tot.incomplete || over.length ? '<div class="warnbox">' + [
+        tot.unapprovedMin >= 1 ? 'พนักงานอยู่เกินกะโดยไม่มีการอนุมัติ OT รวม ' + App.fmtMin(tot.unapprovedMin) + ' (ไม่นำไปคิดเงิน) — <a href="' + App.link('approve.html') + '">ไปหน้าอนุมัติ</a>' : '',
+        tot.incomplete ? 'มีวันที่ไม่ได้บันทึกออกงาน ' + tot.incomplete + ' วัน — HR ควรแก้ไขเวลา' : '',
+        over.length ? 'มาสายเกิน ' + d.lateLimit + ' ครั้งในปีนี้ (ควรออกหนังสือตักเตือน HR-F-06): ' + over.map(function (r) { return App.esc(r.name) + ' ' + r.lateYear + ' ครั้ง'; }).join(', ') : ''
+      ].filter(Boolean).join('<br>') + '</div>' : '') +
+
+      '<div class="card chart"><div class="row"><h3 style="margin:0;flex:1">การมาทำงานรายวัน (จำนวนคน)</h3>' +
+        SERIES.map(function (s) { return '<span class="key"><i style="background:' + s[2] + '"></i>' + s[1] + '</span>'; }).join('') + '</div><div id="chart"></div></div>' +
+
+      '<div class="row" style="margin:16px 0 8px"><h2 style="margin:0;flex:1">สรุปรายคน</h2><button class="sm" id="csv">ส่งออก CSV</button></div>' +
+      '<div class="tbl-wrap"><table><thead><tr>' + cols().map(function (c) { return '<th class="' + (c[2] ? 'num' : '') + '" data-s="' + c[0] + '" style="cursor:pointer">' + c[1] + (sortKey === c[0] ? ' ↓' : '') + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        sorted().map(function (r) {
+          var s = r.summary;
+          return '<tr class="click" data-emp="' + r.empId + '"><td><b>' + App.esc(r.name) + '</b><div class="sub">' + App.esc(r.position || '') + '</div></td>' +
+            '<td class="num">' + s.workDays + '</td><td class="num">' + s.present + '</td>' +
+            '<td class="num">' + (s.late ? s.late + ' <span class="sub">(' + App.fmtMin(s.lateMin) + ')</span>' : '-') + '</td>' +
+            '<td class="num' + (r.lateYear > d.lateLimit ? ' flag' : '') + '">' + r.lateYear + '</td>' +
+            '<td class="num">' + (s.early ? s.early : '-') + '</td><td class="num' + (s.absent ? ' flag' : '') + '">' + (s.absent || '-') + '</td>' +
+            '<td class="num">' + (s.leaveDays ? s.leaveDays + ' <span class="sub">' + Object.keys(s.byLeave).map(function (k) { return (names[k] || k).replace('ลา', '') + ' ' + s.byLeave[k]; }).join(', ') + '</span>' : '-') + '</td>' +
+            '<td class="num">' + App.fmtMin(s.otMin + s.holidayOtMin + s.holidayWorkMin) + '</td>' +
+            '<td class="num">' + App.fmtMin(s.unapprovedMin) + '</td>' +
+            (d.showPay ? '<td class="num">' + (s.otPay ? App.num(s.otPay) : '-') + '</td>' : '') + '</tr>';
+        }).join('') + '</tbody></table></div><p class="sub">กดชื่อเพื่อดูรายวัน · สาย/ปี = นับตั้งแต่ 1 ม.ค. (อนุโลม ' + d.lateLimit + ' ครั้ง) · ชม.อยู่เกิน = เวลาที่ไม่ได้อนุมัติ ไม่นำไปคิดเงิน</p>';
+
+    drawChart(d.trend.filter(function (x) { return x.date <= d.now.date; }));
+    App.$('#pm').onclick = function () { month = App.addMonths(month, -1); load(); };
+    App.$('#nm').onclick = function () { month = App.addMonths(month, 1); load(); };
+    App.$('#csv').onclick = exportCsv;
+    App.$$('th[data-s]', wrap).forEach(function (th) { th.onclick = function () { sortKey = th.getAttribute('data-s'); render(); }; });
+    App.$$('tr[data-emp]', wrap).forEach(function (tr) { tr.onclick = function () { person(tr.getAttribute('data-emp')); }; });
+  }
+
+  function cols() {
+    var c = [['name', 'พนักงาน'], ['workDays', 'วันทำงาน', 1], ['present', 'มา', 1], ['late', 'สาย (เดือนนี้)', 1], ['lateYear', 'สาย/ปี', 1], ['early', 'กลับก่อน', 1],
+             ['absent', 'ขาด', 1], ['leaveDays', 'ลา (วัน)', 1], ['otMin', 'OT', 1], ['unapprovedMin', 'อยู่เกิน (ไม่อนุมัติ)', 1]];
+    if (data.showPay) c.push(['otPay', 'ค่า OT (฿)', 1]);
+    return c;
+  }
+  function sorted() {
+    return data.rows.slice().sort(function (a, b) {
+      if (sortKey === 'name') return a.empId < b.empId ? -1 : 1;
+      var va = sortKey === 'lateYear' ? a.lateYear : sortKey === 'otMin' ? a.summary.otMin + a.summary.holidayOtMin + a.summary.holidayWorkMin : a.summary[sortKey];
+      var vb = sortKey === 'lateYear' ? b.lateYear : sortKey === 'otMin' ? b.summary.otMin + b.summary.holidayOtMin + b.summary.holidayWorkMin : b.summary[sortKey];
+      return (vb || 0) - (va || 0);
+    });
+  }
+  function stat(n, l, cls) { return '<div class="stat ' + (cls || '') + '"><div class="n">' + n + '</div><div class="l">' + App.esc(l) + '</div></div>'; }
+  function num1(x) { return Math.round(x * 10) / 10; }
+
+  // ---- แผนภูมิแท่งซ้อน (จำนวนคนต่อวัน) + tooltip
+  function drawChart(days) {
+    var el = App.$('#chart');
+    if (!days.length) { el.innerHTML = '<div class="empty">ยังไม่มีข้อมูลเดือนนี้</div>'; return; }
+    var W = 760, H = 220, L = 28, B = 22, T = 8, max = Math.max(1, Math.max.apply(null, days.map(function (x) { return x.present + x.late + x.absent + x.leave; })));
+    var step = (W - L - 4) / days.length, bw = Math.max(4, Math.min(22, step - 4)), y = function (v) { return T + (H - T - B) * (1 - v / max); };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="แผนภูมิจำนวนพนักงานที่มา สาย ขาด ลา รายวัน">';
+    var ticks = max <= 5 ? max : 4;
+    for (var i = 0; i <= ticks; i++) { var v = Math.round(max * i / ticks), yy = y(v); svg += '<line x1="' + L + '" x2="' + W + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--line)" stroke-width="1"/><text class="axis" x="' + (L - 6) + '" y="' + (yy + 3) + '" text-anchor="end">' + v + '</text>'; }
+    days.forEach(function (x, i) {
+      var cx = L + step * i + (step - bw) / 2, base = H - B;
+      svg += '<g data-i="' + i + '"><rect x="' + (L + step * i) + '" y="' + T + '" width="' + step + '" height="' + (H - T - B) + '" fill="transparent"/>';
+      SERIES.forEach(function (s) {
+        var n = x[s[0]]; if (!n) return;
+        var h = (H - T - B) * n / max, top = base - h;
+        svg += '<rect x="' + cx + '" y="' + (top + 1) + '" width="' + bw + '" height="' + Math.max(1, h - 2) + '" rx="2" fill="' + s[2] + '"/>';
+        base = top;
+      });
+      var dd = +x.date.slice(8);
+      if (dd === 1 || dd % 5 === 0) svg += '<text class="axis" x="' + (cx + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + dd + '</text>';
+      svg += '</g>';
+    });
+    el.innerHTML = svg + '</svg>';
+    var tip = App.$('#tip');
+    App.$$('g[data-i]', el).forEach(function (g) {
+      g.addEventListener('mousemove', function (e) {
+        var x = days[+g.getAttribute('data-i')];
+        tip.innerHTML = '<b>' + App.dateTH(x.date, { dow: true }) + '</b><br>' + SERIES.map(function (s) { return '<i style="background:' + s[2] + '"></i>' + s[1] + ' ' + x[s[0]] + ' คน'; }).join('<br>');
+        tip.style.display = 'block'; tip.style.left = Math.min(e.clientX + 12, innerWidth - 170) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
+      });
+      g.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+    });
+  }
+
+  // ---- รายคน
+  function person(empId) {
+    var m = App.modal('รายละเอียดรายวัน', '<div class="loading"><span class="spin"></span>กำลังโหลด…</div>');
+    App.call('month', { month: month, empId: empId }).then(function (d) {
+      var s = d.summary, canEdit = App.can('hr');
+      m.el.innerHTML = '<div class="card"><div class="row"><div style="flex:1"><b style="font-size:17px">' + App.esc(d.emp.name) + '</b><div class="sub">' + App.esc(d.emp.position || '') + ' · ' + App.esc(d.emp.department || '') + '</div></div>' +
+        '<a class="btn sm" href="' + App.link('my.html') + (App.link('my.html').indexOf('?') > 0 ? '&' : '?') + 'emp=' + empId + '&month=' + month + '">ดูปฏิทิน</a></div>' +
+        '<div class="grid g4" style="margin-top:12px">' + stat(s.present, 'วันที่มา', 'ok') + stat(s.late, 'สาย (' + App.fmtMin(s.lateMin) + ')', s.late ? 'warn' : '') + stat(s.absent, 'ขาด', s.absent ? 'bad' : '') + stat(s.leaveDays, 'วันลา', 'info') + '</div>' +
+        '<p class="sub">สิทธิ์ลาคงเหลือ: ' + d.balance.filter(function (b) { return b.eligible && +b.quota; }).map(function (b) { return b.name + ' ' + b.remaining + '/' + b.quota; }).join(' · ') + '</p></div>' +
+        '<div class="tbl-wrap"><table><thead><tr><th>วันที่</th><th>กะ</th><th>สถานะ</th><th>เข้า</th><th>ออก</th><th class="num">สาย</th><th class="num">กลับก่อน</th><th class="num">OT</th><th>หมายเหตุ</th>' + (canEdit ? '<th></th>' : '') + '</tr></thead><tbody>' +
+        d.days.filter(function (x) { return x.date <= me.now.date; }).map(function (x) {
+          var r = x.result, i = x.info;
+          return '<tr><td>' + App.dateTH(x.date, { dow: true, noYear: true }) + '</td><td>' + (i.shift ? i.shift.start + '–' + i.shift.end : i.kind === 'weekly_off' ? 'หยุด' : '-') + '</td><td>' + App.statusBadge(r.status) + '</td>' +
+            '<td>' + App.t5(x.att && x.att.inTime) + '</td><td>' + App.t5(x.att && x.att.outTime) + '</td><td class="num">' + App.fmtMin(r.lateMin) + '</td><td class="num">' + App.fmtMin(r.earlyMin) + '</td>' +
+            '<td class="num">' + App.fmtMin(r.otMin + r.holidayOtMin + r.holidayWorkMin) + '</td><td class="sub" style="white-space:normal;min-width:160px">' + App.esc([i.holiday && i.holiday.name, i.leave && i.leave.type && (d.balance.filter(function (b) { return b.type === i.leave.type; })[0] || {}).name].concat(r.flags).filter(Boolean).join(' · ')) + '</td>' +
+            (canEdit ? '<td><button class="sm" data-fix="' + x.date + '">แก้เวลา</button></td>' : '') + '</tr>';
+        }).join('') + '</tbody></table></div>';
+      App.$$('[data-fix]', m.el).forEach(function (b) { b.onclick = function () { fix(empId, b.getAttribute('data-fix'), d.days.filter(function (x) { return x.date === b.getAttribute('data-fix'); })[0], function () { m.close(); load(); person(empId); }); }; });
+    }).catch(function () { m.close(); });
+  }
+
+  function fix(empId, date, day, after) {
+    var a = day.att || {};
+    var m = App.modal('แก้ไขเวลา ' + App.dateTH(date, { dow: true }),
+      '<div class="card"><p class="sub" style="margin-top:0">ทุกการแก้ไขจะถูกบันทึกในแท็บ AttendanceLog พร้อมชื่อผู้แก้และเหตุผล</p><div class="grid g2">' +
+      '<div class="field"><label>เวลาเข้างาน</label><input type="time" id="fi" value="' + App.t5(a.inTime).replace('-', '') + '"></div>' +
+      '<div class="field"><label>เวลาออกงาน</label><input type="time" id="fo" value="' + App.t5(a.outTime).replace('-', '') + '"></div></div>' +
+      '<div class="field"><label>เหตุผล *</label><input id="fr" placeholder="เช่น ลืมกดออกงาน หัวหน้ายืนยันว่าเลิก 21:05"></div><div class="row"><div class="spacer"></div><button class="accent" id="fs">บันทึก</button></div></div>');
+    App.$('#fs', m.el).onclick = function () {
+      var reason = App.$('#fr', m.el).value.trim(), jobs = [];
+      if (!reason) return App.toast('กรุณาระบุเหตุผล', true);
+      if (App.$('#fi', m.el).value !== App.t5(a.inTime)) jobs.push({ field: 'inTime', value: App.$('#fi', m.el).value });
+      if (App.$('#fo', m.el).value !== App.t5(a.outTime)) jobs.push({ field: 'outTime', value: App.$('#fo', m.el).value });
+      jobs.reduce(function (p, j) { return p.then(function () { return App.call('attendanceEdit', { empId: empId, date: date, field: j.field, value: j.value, reason: reason }); }); }, Promise.resolve())
+        .then(function () { App.toast('แก้ไขแล้ว'); m.close(); after(); }).catch(function () {});
+    };
+  }
+
+  function exportCsv() {
+    var names = {}; data.policies.forEach(function (p) { names[p.type] = p.name; });
+    var rows = [['รหัส', 'ชื่อ', 'ตำแหน่ง', 'ประเภท', 'วันทำงาน', 'มา', 'สาย(ครั้ง)', 'สาย(นาที)', 'สายทั้งปี', 'กลับก่อน(ครั้ง)', 'ขาด', 'ไม่ได้ออกงาน', 'ลารวม(วัน)']
+      .concat(data.policies.map(function (p) { return p.name; })).concat(['OT 1.5x (นาที)', 'OT 1.5x (ชม.)', 'ทำงานวันหยุด (นาที)', 'OT วันหยุด 3x (นาที)', 'อยู่เกินไม่อนุมัติ (นาที)']).concat(data.showPay ? ['ค่า OT โดยประมาณ'] : [])];
+    data.rows.forEach(function (r) {
+      var s = r.summary;
+      rows.push([r.empId, r.name, r.position, r.payType === 'daily' ? 'รายวัน' : 'รายเดือน', s.workDays, s.present, s.late, s.lateMin, r.lateYear, s.early, s.absent, s.incomplete, s.leaveDays]
+        .concat(data.policies.map(function (p) { return s.byLeave[p.type] || 0; }))
+        .concat([s.otMin, Math.round(s.otMin / 60 * 100) / 100, s.holidayWorkMin, s.holidayOtMin, s.unapprovedMin]).concat(data.showPay ? [s.otPay] : []));
+    });
+    App.downloadCSV('TheSparrow_สรุปเวลาทำงาน_' + data.month + '.csv', rows);
+  }
+
+  load();
+} });
+</script>
+</body>
+</html>

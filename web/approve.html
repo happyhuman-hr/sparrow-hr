@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>อนุมัติ — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:ital,wght@0,500;1,500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<meta name="theme-color" content="#7a1c2b">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main id="main"></main>
+<script src="config.js"></script>
+<script src="js/app.js"></script>
+<script>
+/* หัวหน้า/HR อนุมัติใบลา คำขอ OT และอนุมัติ OT ย้อนหลังจากเวลาที่พนักงานอยู่เกินกะ */
+App.boot({ page: 'approve', role: 'manager', ready: function (me) {
+  var main = App.$('#main'), focus = App.params.get('id'), focusEmp = App.params.get('emp'), focusDate = App.params.get('date');
+  var wrap = App.h('<div class="wrap narrow"></div>'); main.appendChild(wrap);
+  var names = {};
+
+  function load() { App.loading(wrap); App.call('pending', { id: focus }).then(render).catch(function () {}); }
+
+  function render(d) {
+    d.policies.forEach(function (p) { names[p.type] = p.name; });
+    var leaves = d.leaves.filter(function (l) { return l.status === 'pending'; }), ots = d.ots.filter(function (o) { return o.status === 'pending'; });
+    wrap.innerHTML =
+      section('อยู่เกินเวลา ยังไม่ได้อนุมัติ OT', 'เวลาที่พนักงานบันทึกออกงานเกินกะ 7 วันล่าสุด · หัวหน้าอนุมัติย้อนหลังได้ภายใน 24 ชม. (เกินกว่านั้น HR อนุมัติ)',
+        d.overstay.map(function (o, i) {
+          var hi = o.empId === focusEmp && o.date === focusDate;
+          return '<div class="item"' + (hi ? ' style="background:var(--accent-soft);border-radius:10px;padding:12px"' : '') + '><div class="grow"><b>' + App.esc(o.name) + '</b> · ' + App.dateTH(o.date, { dow: true }) +
+            '<div class="sub">' + App.esc(o.shift) + ' · ออกงาน ' + App.t5(o.outTime) + ' · อยู่เกิน <b>' + App.fmtMin(o.minutes) + '</b></div>' +
+            '<div class="row" style="margin-top:8px"><select class="sm" data-h="' + i + '" style="width:auto">' + hourOpts(o.minutes) + '</select>' +
+            '<button class="sm ok" data-ov="' + i + '">อนุมัติ OT</button></div></div></div>';
+        }).join(''), 'ไม่มีรายการ') +
+      section('ใบลารออนุมัติ', '', leaves.map(function (l) {
+        return '<div class="item"' + (l.id === focus ? ' style="background:var(--accent-soft);border-radius:10px;padding:12px"' : '') + '><div class="grow"><b>' + App.esc(l.name) + '</b> · ' + App.esc(names[l.type] || l.type) +
+          '<div>' + App.dateTH(l.startDate, { dow: true }) + (l.endDate !== l.startDate ? ' – ' + App.dateTH(l.endDate, { dow: true }) : '') + (l.half && l.half !== 'none' ? ' (ครึ่ง' + (l.half === 'am' ? 'เช้า' : 'บ่าย') + ')' : '') + ' · <b>' + l.days + ' วัน</b></div>' +
+          (l.reason ? '<div class="sub">เหตุผล: ' + App.esc(l.reason) + '</div>' : '') + (l.fileUrl ? '<div><a href="' + App.esc(l.fileUrl) + '" target="_blank" rel="noopener">ดูเอกสารแนบ</a></div>' : '') +
+          (l.warnings ? '<div class="warnbox">⚠️ ' + App.esc(l.warnings).split(' | ').join('<br>⚠️ ') + '</div>' : '') +
+          '<div class="row" style="margin-top:8px"><button class="sm ok" data-lv="' + l.id + '" data-ok="1">อนุมัติ</button><button class="sm bad" data-lv="' + l.id + '" data-ok="0">ไม่อนุมัติ</button>' +
+          '<a class="sub" href="' + App.link('my.html') + (App.link('my.html').indexOf('?') > 0 ? '&' : '?') + 'emp=' + l.empId + '">ดูปฏิทินพนักงาน</a></div></div></div>';
+      }).join(''), 'ไม่มีใบลารออนุมัติ') +
+      section('คำขอ OT / ทำงานวันหยุด', '', ots.map(function (o) {
+        return '<div class="item"' + (o.id === focus ? ' style="background:var(--accent-soft);border-radius:10px;padding:12px"' : '') + '><div class="grow"><b>' + App.esc(o.name) + '</b> · ' + (o.kind === 'holiday' ? 'ทำงานวันหยุด' : 'OT') +
+          '<div>' + App.dateTH(o.date, { dow: true }) + ' · ขอ <b>' + App.fmtMin(Math.round(o.hours * 60)) + '</b></div>' + (o.reason ? '<div class="sub">' + App.esc(o.reason) + '</div>' : '') +
+          '<div class="row" style="margin-top:8px">อนุมัติ <input type="number" class="sm" data-oh="' + o.id + '" value="' + Math.round(o.hours * 60) + '" step="1" min="1" max="' + Math.round(o.hours * 60) + '" style="width:84px;padding:5px 8px"> นาที' +
+          '<button class="sm ok" data-ot="' + o.id + '" data-ok="1">อนุมัติ</button><button class="sm bad" data-ot="' + o.id + '" data-ok="0">ไม่อนุมัติ</button></div></div></div>';
+      }).join(''), 'ไม่มีคำขอ OT') +
+      '<div class="card"><h2>ล่าสุด</h2>' + (d.history.length ? d.history.map(function (x) {
+        return '<div class="item"><div class="grow">' + App.esc(x.name) + ' · ' + (x.type ? App.esc(names[x.type] || x.type) + ' ' + App.dateTH(x.startDate) : (x.kind === 'holiday' ? 'ทำงานวันหยุด ' : 'OT ') + App.dateTH(x.date) + ' ' + App.fmtMin(Math.round((x.approvedHours || x.hours) * 60))) + '</div>' + App.reqBadge(x.status) + '</div>';
+      }).join('') : '<div class="empty">-</div>') + '</div>';
+
+    App.$$('[data-ov]', wrap).forEach(function (b) { b.onclick = function () {
+      var o = d.overstay[+b.getAttribute('data-ov')], hrs = (+App.$('[data-h="' + b.getAttribute('data-ov') + '"]', wrap).value) / 60;
+      act(b, 'approveOverstay', { empId: o.empId, date: o.date, hours: hrs, holiday: o.holiday });
+    }; });
+    App.$$('[data-lv]', wrap).forEach(function (b) { b.onclick = function () {
+      var ok = b.getAttribute('data-ok') === '1', note = ok ? '' : prompt('เหตุผลที่ไม่อนุมัติ (แจ้งพนักงาน)') || '';
+      act(b, 'decide', { kind: 'leave', id: b.getAttribute('data-lv'), approve: ok, note: note });
+    }; });
+    App.$$('[data-ot]', wrap).forEach(function (b) { b.onclick = function () {
+      var id = b.getAttribute('data-ot'), ok = b.getAttribute('data-ok') === '1';
+      act(b, 'decide', { kind: 'ot', id: id, approve: ok, hours: (+App.$('[data-oh="' + id + '"]', wrap).value || 0) / 60 });
+    }; });
+  }
+  function hourOpts(min) {
+    // ตัวเลือกเป็นนาที: ทั้งหมดที่อยู่เกิน + ทีละ 15 นาที (คิด OT ละเอียดถึงนาที)
+    var out = '<option value="' + min + '" selected>' + App.fmtMin(min) + ' (ทั้งหมด)</option>';
+    for (var m = Math.floor((min - 1) / 15) * 15; m >= 15; m -= 15) out += '<option value="' + m + '">' + App.fmtMin(m) + '</option>';
+    return out;
+  }
+  function section(title, sub, inner, empty) {
+    return '<div class="card"><h2>' + title + '</h2>' + (sub ? '<p class="sub" style="margin-top:-6px">' + sub + '</p>' : '') + (inner || '<div class="empty">' + empty + '</div>') + '</div>';
+  }
+  function act(btn, action, payload) {
+    btn.disabled = true;
+    App.call(action, payload).then(function () { App.toast('บันทึกแล้ว และแจ้งพนักงานทาง LINE'); load(); }).catch(function () { btn.disabled = false; });
+  }
+  load();
+} });
+</script>
+</body>
+</html>

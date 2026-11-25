@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>หนังสือรับรอง 50 ทวิ — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:ital,wght@0,500;1,500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<meta name="theme-color" content="#7a1c2b">
+<link rel="stylesheet" href="css/app.css">
+<style>.prev { width: 100%; min-height: 1000px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }</style>
+</head>
+<body>
+<main id="main"></main>
+<script src="config.js"></script>
+<script src="js/app.js"></script>
+<script src="js/tax50.js"></script>
+<script>
+/*
+ * หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) รายปี
+ * เจ้าของร้าน / HR: เห็นทุกคน พิมพ์รายคนหรือพิมพ์ทั้งหมด · พนักงาน: เห็นเฉพาะของตัวเอง
+ * รวมยอดจากสลิปเงินเดือนที่ "ส่งแล้ว" ในปีนั้น
+ */
+App.boot({ page: 'tax50', ready: function (me) {
+  var main = App.$('#main'), wrap = App.h('<div class="wrap" style="max-width:980px"></div>'); main.appendChild(wrap);
+  var year = +(App.params.get('year') || (me.now.date.slice(5, 7) <= '02' ? +me.now.date.slice(0, 4) - 1 : me.now.date.slice(0, 4))), data;
+  function m2(x) { return (+x || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function load() { App.loading(wrap); App.call('tax50', { year: year }).then(function (d) { data = d; render(); }).catch(function () {}); }
+
+  function render() {
+    var d = data, be = year + 543, t = d.list.reduce(function (a, o) { a.income += o.income; a.tax += o.tax; a.sso += o.sso; return a; }, { income: 0, tax: 0, sso: 0 });
+    var missing = [];
+    for (var m = 1; m <= 12; m++) { var k = year + '-' + (m < 10 ? '0' : '') + m; if (k <= me.now.date.slice(0, 7) && d.monthsSent.indexOf(k) < 0) missing.push(App.TH_MONTH[m - 1]); }
+    wrap.innerHTML = '<div class="row" style="margin-bottom:10px"><div style="flex:1"><h1>หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)</h1><div class="sub">เงินได้ตามมาตรา 40(1) · รวมจากสลิปเงินเดือนที่ส่งแล้ว</div></div>' +
+        (d.isHR && d.list.length ? '<button class="accent sm" id="all">🖨 พิมพ์ทั้งหมด (' + d.list.length + ' คน)</button>' : '') + '</div>' +
+      '<div class="row" style="margin-bottom:10px"><button class="sm" id="py">‹</button><h2 class="plain" style="margin:0;flex:1;text-align:center">ปีภาษี ' + be + '</h2><button class="sm" id="ny">›</button></div>' +
+      (d.isHR && missing.length ? '<div class="warnbox">ยังไม่ได้ส่งสลิปเดือน: ' + missing.join(', ') + ' — ยอดในหนังสือรับรองนับเฉพาะเดือนที่ส่งสลิปแล้ว</div>' : '') +
+      (d.isHR && !d.payer.taxId ? '<div class="warnbox">ยังไม่ได้ใส่เลขประจำตัวผู้เสียภาษีของร้าน — ใส่ได้ที่ <a href="' + App.link('settings.html') + '#s-shop">หน้าตั้งค่า → ร้าน</a></div>' : '') +
+      (d.list.length ? (d.isHR ?
+        '<div class="tbl-wrap"><table><thead><tr><th>ลำดับ</th><th>พนักงาน</th><th>เลขประจำตัวประชาชน</th><th class="num">เดือน</th><th class="num">เงินได้ที่จ่าย</th><th class="num">ภาษีที่หัก</th><th class="num">ประกันสังคม</th><th></th></tr></thead><tbody>' +
+          d.list.map(function (o, i) {
+            return '<tr><td>' + o.seq + '</td><td><b>' + App.esc(o.name) + '</b><div class="sub">' + o.empId + ' · ' + App.esc(o.position) + '</div></td>' +
+              '<td>' + (o.nationalId ? App.esc(o.nationalId) : '<span class="badge b-late">ยังไม่มี</span>') + (o.address ? '' : ' <span class="badge b-late">ไม่มีที่อยู่</span>') + '</td>' +
+              '<td class="num">' + o.months.length + '</td><td class="num">' + m2(o.income) + '</td><td class="num">' + m2(o.tax) + '</td><td class="num">' + m2(o.sso) + '</td>' +
+              '<td><button class="sm" data-one="' + i + '">พิมพ์</button></td></tr>';
+          }).join('') + '</tbody><tfoot><tr><td></td><td><b>รวม</b></td><td></td><td></td><td class="num"><b>' + m2(t.income) + '</b></td><td class="num"><b>' + m2(t.tax) + '</b></td><td class="num"><b>' + m2(t.sso) + '</b></td><td></td></tr></tfoot></table></div>' +
+          '<p class="sub">ข้อมูลพนักงาน (เลขบัตรประชาชน ที่อยู่) แก้ได้ในแฟ้มพนักงาน · ภาษีในหนังสือรับรองคือยอดที่หักจริงตามสลิป · ใช้ประกอบการยื่น ภ.ง.ด.1ก ภายในเดือนกุมภาพันธ์ของปีถัดไป</p>'
+        : '<div class="row" style="margin-bottom:10px"><div class="spacer"></div><button class="accent sm" id="mine">🖨 พิมพ์ / บันทึก PDF</button></div><iframe class="prev" id="prev" title="หนังสือรับรอง 50 ทวิ"></iframe>')
+      : '<div class="card empty">ยังไม่มีข้อมูลปีนี้<br><span class="sub">หนังสือรับรองจะมีเมื่อร้านส่งสลิปเงินเดือนของปีนั้นแล้ว</span></div>');
+    App.$('#py').onclick = function () { year--; load(); };
+    App.$('#ny').onclick = function () { year++; load(); };
+    if (App.$('#all')) App.$('#all').onclick = function () { App.openTax50(d.list, d.payer, year); };
+    App.$$('[data-one]', wrap).forEach(function (b) { b.onclick = function () { App.openTax50([d.list[+b.getAttribute('data-one')]], d.payer, year); }; });
+    if (App.$('#prev')) {
+      var f = App.$('#prev'); f.srcdoc = App.tax50Html(d.list, d.payer, year);
+      App.$('#mine').onclick = function () { f.contentWindow.focus(); f.contentWindow.print(); };
+    }
+  }
+  load();
+} });
+</script>
+</body>
+</html>

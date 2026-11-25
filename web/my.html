@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ปฏิทินของฉัน — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:ital,wght@0,500;1,500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<meta name="theme-color" content="#7a1c2b">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main id="main"></main>
+<script src="config.js"></script>
+<script src="js/app.js"></script>
+<script>
+/* ปฏิทินรายเดือน: กะ วันหยุด วันลา สถานะเข้างาน + สิทธิ์วันลาคงเหลือ (หัวหน้าเปิดดูของลูกทีมได้ด้วย ?emp=E00x) */
+App.boot({ page: 'my', ready: function (me) {
+  var main = App.$('#main'), month = App.params.get('month') || me.now.date.slice(0, 7), empId = App.params.get('emp') || '';
+  var wrap = App.h('<div class="wrap narrow"></div>'); main.appendChild(wrap);
+  var LEAVE_NAME = {};
+
+  function load() {
+    App.loading(wrap);
+    App.call('month', { month: month, empId: empId }).then(render).catch(function () {});
+  }
+
+  /** สถานะของวัน: { label, cls } — ปกติ / สาย / กลับก่อน / ขาดงาน / ลา(ประเภท) / หยุด / วันหยุดตามประเพณี */
+  var PENDING = {};   // วันที่ → ใบลาที่ยังรออนุมัติ
+  function dayStatus(d) {
+    var i = d.info, r = d.result, lv = i.leave ? (LEAVE_NAME[i.leave.type] || 'ลา') + (i.halfLeave ? ' ½' : '') : '';
+    var pl = !i.leave && i.kind !== 'weekly_off' && i.kind !== 'holiday' && i.kind !== 'sub_off' ? PENDING[d.date] : null;
+    if (pl && !(d.att && d.att.inTime)) return { label: (LEAVE_NAME[pl.type] || 'ลา') + (pl.half && pl.half !== 'none' ? ' ½' : ''), cls: 'pending', sub: 'รออนุมัติ' };
+    if (i.kind === 'leave') return { label: lv, cls: 'leave' };
+    if (i.kind === 'holiday' || i.kind === 'sub_off') return r.status === 'holiday_work' ? { label: 'ทำงานวันหยุด', cls: 'hol' } : { label: i.holiday ? i.holiday.name : 'วันหยุด', cls: 'hol' };
+    if (i.kind === 'weekly_off') return r.status === 'holiday_work' ? { label: 'ทำงานวันหยุด', cls: 'hol' } : { label: 'วันหยุด', cls: 'off' };
+    if (r.status === 'absent') return { label: 'ขาดงาน', cls: 'bad' };
+    if (r.status === 'incomplete') return { label: 'ไม่ได้ออกงาน', cls: 'bad' };
+    if (r.status === 'upcoming' || r.status === 'not_in') return { label: lv || (i.shift ? 'กะ ' + i.shift.start : ''), cls: lv ? 'leave' : 'plan' };
+    if (r.status === 'unscheduled') return { label: '', cls: 'plan' };
+    var parts = [];
+    if (r.lateMin) parts.push('สาย ' + r.lateMin + ' น.');
+    if (r.earlyMin) parts.push('กลับก่อน');
+    if (lv) parts.push(lv);
+    if (r.status === 'working' && !parts.length) return { label: 'กำลังทำงาน', cls: 'ok' };
+    return { label: parts.length ? parts.join(' · ') : 'ปกติ', cls: r.lateMin || r.earlyMin ? 'warn' : lv ? 'leave' : 'ok' };
+  }
+  function cellLines(d) {
+    var a = d.att, out = [];
+    if (a && a.inTime) out.push('เข้า ' + App.t5(a.inTime));
+    if (a && a.outTime) out.push('ออก ' + App.t5(a.outTime));
+    return out;
+  }
+
+  function render(d) {
+    d.balance.forEach(function (b) { LEAVE_NAME[b.type] = b.name; });
+    PENDING = {};
+    (d.pendingLeaves || []).forEach(function (l) { for (var x = l.startDate; x <= l.endDate; x = App.addDays(x, 1)) PENDING[x] = l; });
+    var first = d.days[0].date, lead = (new Date(first + 'T00:00:00Z').getUTCDay() + 6) % 7; // เริ่มสัปดาห์วันจันทร์
+    var cells = '';
+    ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'].forEach(function (x) { cells += '<div class="dow">' + x + '</div>'; });
+    for (var i = 0; i < lead; i++) cells += '<div class="d blank"></div>';
+    d.days.forEach(function (day, idx) {
+      var st = dayStatus(day);
+      cells += '<div class="d k-' + day.info.kind + ' s-' + day.result.status + (day.date === me.now.date ? ' today' : '') + '" data-i="' + idx + '"><span class="num">' + (+day.date.slice(8)) + '</span>' +
+        (st.label ? '<span class="st st-' + st.cls + '">' + App.esc(st.label) + '</span>' : '') +
+        (st.sub ? '<span class="tag" style="color:var(--info)">' + App.esc(st.sub) + '</span>' : '') +
+        cellLines(day).map(function (t) { return '<span class="tag">' + t + '</span>'; }).join('') + '</div>';
+    });
+    // รายการรายวัน (อ่านง่ายบนมือถือ) — เฉพาะวันที่ผ่านมาแล้ว ล่าสุดอยู่บน
+    var listRows = d.days.filter(function (x) { return x.date <= me.now.date; }).slice().reverse().map(function (x) {
+      var st = dayStatus(x), a = x.att;
+      return '<tr><td>' + App.dateTH(x.date, { dow: true, noYear: true }) + '</td><td>' + (x.info.shift ? x.info.shift.start + '–' + x.info.shift.end : '-') + '</td>' +
+        '<td>' + App.t5(a && a.inTime) + '</td><td>' + App.t5(a && a.outTime) + '</td><td><span class="st st-' + st.cls + '">' + App.esc(st.label || '-') + (st.sub ? ' · ' + App.esc(st.sub) : '') + '</span></td></tr>';
+    }).join('');
+    var s = d.summary, emp = d.emp;
+    wrap.innerHTML =
+      (empId ? '<div class="card"><b>' + App.esc(emp.name) + '</b><div class="sub">' + App.esc(emp.position || '') + ' · ' + App.esc(emp.department || '') + '</div></div>' : '') +
+      '<div class="row" style="margin-bottom:10px"><button class="sm" id="prev">‹</button><h2 class="plain" style="margin:0;flex:1;text-align:center">' + App.monthTH(d.month) + '</h2><button class="sm" id="next">›</button></div>' +
+      '<div class="cal">' + cells + '</div>' +
+      '<div class="legend"><span class="badge b-off">วันหยุดประจำสัปดาห์</span><span class="badge b-holiday">วันหยุดตามประเพณี / ชดเชย</span><span class="badge b-leave">ลา</span><span class="st st-pending" style="font-size:12px">ลารออนุมัติ</span><span class="badge b-late">สาย</span><span class="badge b-absent">ขาด</span></div>' +
+      '<div class="grid g4" style="margin:14px 0">' +
+        stat(s.present, 'วันมาทำงาน', 'ok') + stat(s.late, 'ครั้งที่สาย (' + App.fmtMin(s.lateMin) + ')', s.late ? 'warn' : '') +
+        stat(s.absent, 'ขาดงาน', s.absent ? 'bad' : '') + stat(((s.otMin + s.holidayOtMin) / 60).toFixed(1), 'ชม. OT ที่อนุมัติ', 'info') + '</div>' +
+      (d.lateCountYear >= 3 ? '<div class="warnbox">ปีนี้มาสายแล้ว ' + d.lateCountYear + ' ครั้ง — ข้อบังคับฯ อนุโลมได้ไม่เกิน 3 ครั้งต่อปี</div>' : '<p class="sub">ปีนี้มาสาย ' + d.lateCountYear + ' ครั้ง (อนุโลมไม่เกิน 3 ครั้ง/ปี)</p>') +
+      '<div class="card"><h2>เวลาเข้า-ออกงานรายวัน</h2>' + (listRows ? '<div class="tbl-wrap"><table><thead><tr><th>วันที่</th><th>กะ</th><th>เข้างาน</th><th>ออกงาน</th><th>สถานะ</th></tr></thead><tbody>' + listRows + '</tbody></table></div>' : '<div class="empty">ยังไม่มีข้อมูลเดือนนี้</div>') + '</div>' +
+      '<div class="card"><h2>สิทธิ์วันลาปีนี้</h2>' + d.balance.filter(function (b) { return +b.quota || b.used || b.pending; }).map(function (b) {
+        return '<div class="item"><div class="grow"><b>' + App.esc(b.name) + '</b><div class="sub">' + App.esc(b.paid || '') + (b.note ? ' · ' + App.esc(b.note) : '') + '</div></div>' +
+          '<div style="text-align:right"><b style="font-size:18px">' + (b.eligible ? b.remaining : '–') + '</b><span class="sub"> / ' + (b.quota || '-') + ' วัน</span>' +
+          '<div class="sub">ใช้ ' + b.used + (b.pending ? ' · รอ ' + b.pending : '') + '</div></div></div>';
+      }).join('') + '</div>' +
+      '<div class="card"><h2>คำขอของฉัน</h2>' + (d.myLeaves.length + d.myOT.length ? d.myLeaves.map(function (l) {
+          return '<div class="item"><div class="grow"><b>' + App.esc(LEAVE_NAME[l.type] || l.type) + '</b> ' + App.dateTH(l.startDate) + (l.endDate !== l.startDate ? ' – ' + App.dateTH(l.endDate) : '') +
+            (l.half && l.half !== 'none' ? ' (ครึ่ง' + (l.half === 'am' ? 'เช้า' : 'บ่าย') + ')' : '') + '<div class="sub">' + l.days + ' วัน' + (l.reason ? ' · ' + App.esc(l.reason) : '') + '</div></div>' + App.reqBadge(l.status) + '</div>';
+        }).join('') + d.myOT.map(function (o) {
+          return '<div class="item"><div class="grow"><b>' + (o.kind === 'holiday' ? 'ทำงานวันหยุด' : 'OT') + '</b> ' + App.dateTH(o.date) + '<div class="sub">' + App.fmtMin(Math.round((o.approvedHours || o.hours) * 60)) + (o.reason ? ' · ' + App.esc(o.reason) : '') + '</div></div>' + App.reqBadge(o.status) + '</div>';
+        }).join('') : '<div class="empty">ยังไม่มีคำขอ</div>') + '</div>';
+
+    App.$('#prev').onclick = function () { month = App.addMonths(month, -1); load(); };
+    App.$('#next').onclick = function () { month = App.addMonths(month, 1); load(); };
+    App.$$('.cal .d[data-i]', wrap).forEach(function (el) { el.onclick = function () { detail(d.days[+el.getAttribute('data-i')]); }; });
+  }
+
+  function stat(n, l, cls) { return '<div class="stat ' + (cls || '') + '"><div class="n">' + n + '</div><div class="l">' + App.esc(l) + '</div></div>'; }
+
+  function detail(day) {
+    var i = day.info, r = day.result, a = day.att;
+    var rows = [
+      ['สถานะ', App.statusBadge(r.status) || '-'],
+      ['กะ', i.shift ? i.shift.start + ' – ' + i.shift.end + (i.shift.breakStart ? ' (พัก ' + i.shift.breakStart + '–' + i.shift.breakEnd + ')' : '') : (i.kind === 'weekly_off' ? 'วันหยุดประจำสัปดาห์' : '-')],
+      i.holiday ? ['วันหยุดตามประเพณี', App.esc(i.holiday.name) + (i.holiday.mode === 'substitute' ? ' — ทำงาน (หยุดชดเชย ' + App.dateTH(i.holiday.substituteDate) + ')' : i.holiday.mode === 'paid' ? ' — ทำงานรับค่าวันหยุด' : '')] : null,
+      i.leave ? ['ลา', App.esc(LEAVE_NAME[i.leave.type] || i.leave.type) + (i.halfLeave ? ' ครึ่ง' + (i.halfLeave === 'am' ? 'เช้า' : 'บ่าย') : '')] : null,
+      ['เข้างาน', App.t5(a && a.inTime) + (r.lateMin ? ' · สาย ' + App.fmtMin(r.lateMin) : '') + (a && a.inDist !== '' && a && a.inDist !== undefined ? ' <span class="sub">(' + a.inDist + ' ม.)</span>' : '')],
+      ['ออกงาน', App.t5(a && a.outTime) + (r.earlyMin ? ' · กลับก่อน ' + App.fmtMin(r.earlyMin) : '')],
+      r.countedIn ? ['เวลาที่นับ', r.countedIn + ' – ' + (r.countedOut || '-') + ' (' + App.fmtMin(r.workedMin) + ')'] : null,
+      ['OT ที่อนุมัติ', App.fmtMin(r.otMin + r.holidayOtMin)],
+      r.holidayWorkMin ? ['ทำงานวันหยุด', App.fmtMin(r.holidayWorkMin)] : null,
+      r.unapprovedMin ? ['อยู่เกิน (ไม่ได้อนุมัติ)', App.fmtMin(r.unapprovedMin)] : null
+    ].filter(Boolean);
+    App.modal(App.dateTH(day.date, { dow: true }), '<div class="card">' + rows.map(function (x) {
+      return '<div class="item"><div class="grow sub">' + x[0] + '</div><div style="text-align:right">' + x[1] + '</div></div>';
+    }).join('') + '</div>' + (r.flags.filter(Boolean).length ? '<div class="warnbox">' + r.flags.filter(Boolean).map(App.esc).join('<br>') + '</div>' : ''));
+  }
+
+  load();
+} });
+</script>
+</body>
+</html>

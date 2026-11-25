@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ลงเวลา — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:ital,wght@0,500;1,500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<meta name="theme-color" content="#7a1c2b">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main id="main"></main>
+<script src="config.js"></script>
+<script src="js/app.js"></script>
+<script>
+/*
+ * ลงเวลาเข้า/ออกงาน
+ * เปิดจาก Rich menu ด้วย ?action=in หรือ ?action=out → ขอ GPS แล้วบันทึกทันที ไม่ต้องกดซ้ำ แล้วปิดหน้าต่างเองใน 3 วินาที
+ * เปิดเฉย ๆ → แสดงปุ่มเข้างาน/ออกงาน
+ */
+App.boot({ page: 'checkin', ready: function (me) {
+  var main = App.$('#main'), auto = App.params.get('action');
+  var wrap = App.h('<div class="wrap narrow"></div>'); main.appendChild(wrap);
+
+  function todayCard(d) {
+    var t = d.today, info = t.info, a = t.att, r = t.result;
+    var shift = info.shift ? 'กะ ' + info.shift.start + ' – ' + info.shift.end + (info.halfLeave ? ' (ลาครึ่ง' + (info.halfLeave === 'am' ? 'เช้า' : 'บ่าย') + ')' : '')
+              : info.kind === 'weekly_off' ? 'วันหยุดประจำสัปดาห์' : info.holiday ? info.holiday.name : info.kind === 'leave' ? 'วันลา' : 'ไม่มีกะในตาราง';
+    return '<div class="card"><div class="row"><div><div class="sub">วันนี้</div><b>' + App.esc(shift) + '</b></div><div class="spacer"></div>' + App.statusBadge(r.status) + '</div>' +
+      '<div class="hr"></div><div class="grid g2"><div><div class="sub">เข้างาน</div><b style="font-size:20px">' + App.t5(a && a.inTime) + '</b>' + (r.lateMin ? ' <span class="badge b-late">สาย ' + App.fmtMin(r.lateMin) + '</span>' : '') + '</div>' +
+      '<div><div class="sub">ออกงาน</div><b style="font-size:20px">' + App.t5(a && a.outTime) + '</b>' + (r.earlyMin ? ' <span class="badge b-late">ก่อน ' + App.fmtMin(r.earlyMin) + '</span>' : '') + '</div></div>' +
+      (r.flags && r.flags.filter(Boolean).length ? '<div class="warnbox">' + r.flags.filter(Boolean).map(App.esc).join('<br>') + '</div>' : '') + '</div>';
+  }
+
+  function home(d) {
+    var now = d.now;
+    wrap.innerHTML =
+      '<div class="playcard clock">' +
+        '' +
+        '<div class="script">' + greet(now.time) + ', ' + App.esc(d.user.nickname || d.user.firstName) + '</div>' +
+        '<div class="time" id="clk" style="margin-top:6px">' + now.time.slice(0, 5) + '</div><div class="date">' + App.dateTH(now.date, { dow: true }) + '</div>' +
+        '<div class="dots" style="margin-top:10px" aria-hidden="true"><i></i><i></i><i></i></div></div>' +
+      '<div class="bigbtns" style="margin-bottom:14px"><button class="bigbtn in" data-a="in"><span class="ic">→</span>เข้างาน</button>' +
+      '<button class="bigbtn out" data-a="out"><span class="ic">←</span>ออกงาน</button></div>' +
+      todayCard(d) +
+      '<div id="newsStrip"></div>' +
+      '<p class="sub" style="text-align:center">ต้องอยู่ในรัศมี ' + d.shop.radiusM + ' ม. จากร้าน ' + App.esc(d.shop.name) + ' · ระบบใช้เวลาจากเซิร์ฟเวอร์</p>';
+    App.$$('[data-a]', wrap).forEach(function (b) { b.onclick = function () { run(b.getAttribute('data-a')); }; });
+    // ข่าวที่ยังไม่ได้อ่าน (สูงสุด 2 เรื่อง)
+    App.api('news').then(function (res) {
+      if (!res.ok || !App.$('#newsStrip')) return;
+      var read = []; try { read = JSON.parse(localStorage.getItem('hris-news-read') || '[]'); } catch (e) { /* ignore */ }
+      var unread = res.data.items.filter(function (n) { return read.indexOf(n.id + (n.updatedAt || '')) < 0; }).slice(0, 2);
+      App.$('#newsStrip').innerHTML = unread.map(function (n) {
+        return '<a class="card" href="' + App.link('news.html') + '#' + n.id + '" style="display:flex;gap:12px;align-items:center;text-decoration:none;color:var(--ink);border-color:' + (n.category === 'urgent' ? 'var(--bad)' : 'var(--wine)') + '">' +
+          '<span style="font-size:22px">📣</span><span style="flex:1;min-width:0"><span class="sub">' + (n.category === 'urgent' ? 'ประกาศด่วน' : 'ข่าวใหม่') + '</span><br><b>' + App.esc(n.title) + '</b></span><span style="color:var(--wine)">›</span></a>';
+      }).join('');
+    });
+    var base = Date.now(), start = App.dParts ? now.time : now.time;
+    var sec0 = (+start.slice(0, 2)) * 3600 + (+start.slice(3, 5)) * 60 + (+start.slice(6, 8) || 0);
+    setInterval(function () {
+      var s = sec0 + Math.floor((Date.now() - base) / 1000), hh = Math.floor(s / 3600) % 24, mm = Math.floor(s / 60) % 60;
+      var el = App.$('#clk'); if (el) el.textContent = (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+    }, 1000);
+  }
+
+  function greet(t) { var hh = +t.slice(0, 2); return hh < 12 ? 'Good morning' : hh < 17 ? 'Good afternoon' : 'Good evening'; }
+
+  function getPosition() {
+    if (App.DEMO) return window.HRIS_DEMO.position();
+    return new Promise(function (ok, bad) {
+      if (!navigator.geolocation) return bad(new Error('อุปกรณ์นี้ไม่รองรับ GPS'));
+      navigator.geolocation.getCurrentPosition(ok, function (e) {
+        bad(new Error(e.code === 1 ? 'ไม่ได้อนุญาตให้เข้าถึงตำแหน่ง — เปิดสิทธิ์ตำแหน่งให้ LINE ในการตั้งค่าโทรศัพท์ แล้วลองใหม่' : 'หาตำแหน่งไม่ได้ ลองใหม่อีกครั้ง'));
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    });
+  }
+
+  function show(kind, icon, big, line1, line2, buttons) {
+    wrap.innerHTML = '<div class="playcard result ' + kind + '"><div class="mark">' + icon + '</div>' + (big ? '<div class="big">' + App.esc(big) + '</div>' : '') +
+      '<div style="font-weight:600;margin-top:6px">' + App.esc(line1 || '') + '</div><div class="sub" style="margin-top:4px">' + App.esc(line2 || '') + '</div>' +
+      '<div class="row" style="justify-content:center;margin-top:16px">' + (buttons || '') + '</div></div>';
+  }
+
+  function run(action, confirm) {
+    var label = action === 'in' ? 'เข้างาน' : 'ออกงาน';
+    show('wait', '<span class="spin" style="border-top-color:#fff;width:30px;height:30px"></span>', '', 'กำลังหาตำแหน่งและบันทึก' + label + '…', 'กรุณาอย่าปิดหน้านี้');
+    getPosition().then(function (pos) {
+      return App.api('clock', { action: action, lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy, confirm: !!confirm });
+    }).then(function (res) {
+      if (!res.ok && res.needBind) return location.reload();
+      var d = res.data || res;
+      if (!res.ok) {
+        return show('bad', '✕', '', 'บันทึก' + label + 'ไม่สำเร็จ', res.error, '<button class="primary" id="again">ลองใหม่</button><button id="bk">กลับ</button>'), bind();
+      }
+      if (d.needConfirm) {   // กดซ้ำ → ถามก่อนว่าจะ{เข้า/ออก}งานใหม่เป็นเวลานี้ใช่หรือไม่
+        show('wait', '!', d.time, d.reason, d.detail,
+          '<button class="accent" id="cf">ใช่ ' + label + 'ใหม่เวลา ' + App.esc(d.now || '') + '</button><button id="bk">ไม่ใช่ ใช้เวลาเดิม</button>');
+        App.$('#cf').onclick = function () { run(action, true); }; App.$('#bk').onclick = reload;
+        return;
+      }
+      if (!d.ok) return show('bad', '✕', d.distance ? d.distance + ' ม.' : '', 'บันทึก' + label + 'ไม่สำเร็จ', d.reason, '<button class="primary" id="again">ลองใหม่</button><button id="bk">กลับ</button>'), bind();
+      show('ok', '✓', d.time, (d.already ? '' : label + 'สำเร็จ · ') + (d.shiftText || ''), [d.message, d.warning].filter(Boolean).join(' · '), '<button id="bk">ดูรายละเอียดวันนี้</button>');
+      App.$('#bk').onclick = reload;
+      if (!d.already) App.confetti(action === 'in' ? 22 : 14);
+      if (auto && window.liff && liff.isInClient && liff.isInClient()) setTimeout(function () { liff.closeWindow(); }, 3000);
+    }).catch(function (e) {
+      show('bad', '✕', '', 'บันทึก' + label + 'ไม่สำเร็จ', e.message, '<button class="primary" id="again">ลองใหม่</button><button id="bk">กลับ</button>'); bind();
+    });
+    function bind() { App.$('#again').onclick = function () { run(action, confirm); }; App.$('#bk').onclick = reload; }
+  }
+  function reload() { App.call('me').then(home); }
+
+  if (auto === 'in' || auto === 'out') run(auto); else home(me);
+} });
+</script>
+</body>
+</html>
