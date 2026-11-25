@@ -255,16 +255,43 @@
   }
 
   /** เริ่มหน้า: opts = { page, role, ready(me) } */
+  // ---- เก็บข้อมูลผู้ใช้ (me) ไว้ในแท็บนี้ 10 นาที — เปลี่ยนหน้าแล้วไม่ต้องรอเซิร์ฟเวอร์อีกรอบ (หน้าลงเวลาดึงสดเสมอ)
+  var ME_KEY = 'hris-me', ME_TTL = 10 * 60 * 1000;
+  function lineSub() { try { return (window.liff && liff.getDecodedIDToken && liff.getDecodedIDToken() || {}).sub || ''; } catch (e) { return ''; } }
+  function meSave(me) { if (DEMO) return; try { sessionStorage.setItem(ME_KEY, JSON.stringify({ at: Date.now(), sub: lineSub(), me: me })); } catch (e) { /* ignore */ } }
+  function meCached() {
+    if (DEMO) return null;
+    try {
+      var o = JSON.parse(sessionStorage.getItem(ME_KEY) || 'null');
+      if (!o || !o.me || Date.now() - o.at > ME_TTL || !o.sub || o.sub !== lineSub()) return null;
+      // เลื่อนเวลาเซิร์ฟเวอร์ (เวลาไทย) ไปตามเวลาที่ผ่านไป
+      var t = new Date(Date.parse(o.me.now.date + 'T' + o.me.now.time + '+07:00') + (Date.now() - o.at) + 7 * 3600e3).toISOString();
+      o.me.now = { date: t.slice(0, 10), time: t.slice(11, 19) };
+      return o.me;
+    } catch (e) { return null; }
+  }
   function boot(opts) {
     var main = $('#main');
     main.innerHTML = splash('กำลังเข้าสู่ระบบ…');
-    initAuth().then(function () { return api('me'); }).then(function (res) {
-      if (!res.ok) { if (res.needBind) return showBind(); main.innerHTML = '<div class="wrap narrow"><div class="errbox">' + esc(res.error) + '</div></div>'; return; }
-      state.me = res.data;
+    function start(me) {
+      state.me = me;
       renderChrome(opts.page);
       if (opts.role && !can(opts.role)) { main.innerHTML = '<div class="wrap narrow"><div class="card empty">หน้านี้สำหรับหัวหน้างาน / HR / ผู้บริหาร</div></div>'; return; }
       main.innerHTML = '';
       opts.ready(state.me);
+    }
+    initAuth().then(function () {
+      var cached = opts.page !== 'checkin' && meCached();
+      if (cached) {
+        start(cached);
+        api('me').then(function (res) { if (res.ok) { meSave(res.data); state.me = res.data; } });   // อัปเดตเบื้องหลัง
+        return;
+      }
+      return api('me').then(function (res) {
+        if (!res.ok) { if (res.needBind) return showBind(); main.innerHTML = '<div class="wrap narrow"><div class="errbox">' + esc(res.error) + '</div></div>'; return; }
+        meSave(res.data);
+        start(res.data);
+      });
     }).catch(function (e) {
       main.innerHTML = '<div class="wrap narrow"><div class="errbox">เปิดระบบไม่สำเร็จ: ' + esc(e && e.message || e) + '</div></div>';
     });
