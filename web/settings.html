@@ -117,7 +117,9 @@ App.boot({ page: 'settings', role: 'hr', ready: function (me) {
         '<div class="grid g2">' +
           field('liffId', 'LIFF ID', 'จาก LINE Developers → LINE Login channel → LIFF') +
           field('lineLoginChannelId', 'LINE Login Channel ID', 'ใช้ตรวจสอบการเข้าสู่ระบบ') +
-        '</div></div>' +
+        '</div><div class="hr"></div><div class="row" style="align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>QR code สำหรับพนักงาน</b>' +
+        '<div class="sub">QR อันเดียว A4 1 แผ่น ติดที่ร้าน ใช้แทนปุ่ม Rich menu (ไม่ต้องมี LINE OA) · สแกนแล้วเข้าหน้าลงเวลา และไปเมนูอื่นจากแถบด้านล่าง · QR ใช้ LIFF ID จากไฟล์ web/config.js</div></div>' +
+        '<a class="btn" href="' + App.link('qr.html') + '" target="_blank" rel="noopener">🖨 พิมพ์ QR code</a></div></div>' +
 
       '<div class="card" id="s-shift"><h2>กะทำงาน</h2><p class="sub" style="margin-top:-4px">ข้อบังคับฯ หมวด 03 · ผ่อนผันมาสาย = นาทีที่ยังไม่นับสาย (0 = นับตั้งแต่นาทีแรก) · กะที่ยังใช้อยู่ในตารางลบไม่ได้</p>' +
         '<div class="tbl-wrap"><table class="edit-tbl"><thead><tr><th>รหัส</th><th>ชื่อกะ</th><th>เข้า</th><th>ออก</th><th>พักเริ่ม</th><th>พักจบ</th><th>ผ่อนผันสาย (นาที)</th><th></th></tr></thead><tbody id="shiftRows"></tbody></table></div>' +

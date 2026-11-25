@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>พิมพ์ QR code — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:wght@500&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<style>
+  /* หน้าพิมพ์ QR code อันเดียว — ไม่ต้องล็อกอิน (QR เป็นแค่ลิงก์เข้าระบบ สแกนแล้วยังต้องล็อกอิน LINE) */
+  :root { --wine: #7a1c2b; --cream: #fbf6ee; --ink: #231b1b; --ink-3: #8d8079; --line: #e7dcd2;
+    --gingham: repeating-linear-gradient(90deg, var(--wine) 0 8px, transparent 8px 16px), repeating-linear-gradient(0deg, rgba(122,28,43,.55) 0 5px, transparent 5px 10px); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eee7df; color: var(--ink); font: 14px/1.55 "IBM Plex Sans Thai Looped", sans-serif; }
+  .bar { position: sticky; top: 0; z-index: 5; background: var(--cream); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .bar b { color: var(--wine); font-size: 16px; }
+  .bar .sp { flex: 1; }
+  .bar button, .bar a { font: inherit; font-weight: 600; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink); text-decoration: none; cursor: pointer; }
+  .bar button.go { background: var(--wine); color: #fff; border-color: var(--wine); }
+  .warn { margin: 12px auto 0; max-width: 210mm; background: #fff3d1; border: 1px solid #ecd59a; color: #7a5300; border-radius: 10px; padding: 10px 14px; }
+  .warn code { background: #fff; padding: 0 4px; border-radius: 4px; }
+  .sheets { padding: 16px; display: flex; justify-content: center; }
+  .page { width: 210mm; min-height: 297mm; background: var(--cream); box-shadow: 0 4px 18px rgba(0,0,0,.12); position: relative; padding: 18mm 18mm 12mm; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+  .page::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 8mm; background: var(--gingham); }
+  .page::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 5mm; background: var(--gingham); opacity: .7; }
+  .head { text-align: center; }
+  .head img { height: 24mm; }
+  .head h1 { font: 500 32px "EB Garamond", serif; color: var(--wine); margin: 1mm 0 0; letter-spacing: .02em; }
+  .head .sub { color: var(--ink-3); font-size: 14px; }
+  .tile { margin-top: 8mm; background: #fff; border: 1.5px solid var(--wine); border-radius: 7mm; padding: 9mm 12mm 8mm; text-align: center; position: relative; width: 128mm; }
+  .tile::after { content: ''; position: absolute; inset: 2.2mm; border: 1px solid rgba(122,28,43,.35); border-radius: 5mm; pointer-events: none; }
+  .tile h2 { margin: 0 0 4mm; font-size: 28px; color: var(--wine); line-height: 1.3; }
+  .tile h2 small { display: block; font-size: 15px; color: var(--ink-3); font-weight: 400; }
+  .qr svg { width: 100%; max-width: 96mm; height: auto; display: block; margin: 0 auto; }
+  .steps { margin: 9mm 0 0; padding: 0; list-style: none; counter-reset: s; width: 150mm; }
+  .steps li { counter-increment: s; position: relative; padding: 0 0 4mm 12mm; font-size: 16px; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 8mm; height: 8mm; border-radius: 50%; background: var(--wine); color: #fff; font-weight: 700; font-size: 14px; display: grid; place-items: center; }
+  .note { margin-top: 2mm; font-size: 12.5px; color: var(--ink-3); text-align: center; width: 160mm; }
+  .foot { margin-top: auto; padding-top: 5mm; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--ink-3); font-size: 11px; }
+  .foot img { height: 9mm; opacity: .8; }
+  .sample { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 3; }
+  .sample span { transform: rotate(-28deg); font-size: 72px; font-weight: 700; color: rgba(180,35,24,.18); border: 6px solid rgba(180,35,24,.18); padding: 6px 28px; border-radius: 14px; }
+  @media (max-width: 860px) { .sheets { padding: 8px; } .page { width: 100%; min-height: 0; padding: 14mm 6mm 10mm; } .tile, .steps, .note { width: 100%; } }
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: none; } .bar, .warn { display: none !important; } .sheets { padding: 0; }
+    .page { box-shadow: none; width: 210mm; height: 297mm; min-height: 0; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="bar"><b>พิมพ์ QR code</b><span style="color:var(--ink-3)">กระดาษ A4 · 1 แผ่น</span><span class="sp"></span>
+  <a href="settings.html">‹ กลับหน้าตั้งค่า</a><button class="go" onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button></div>
+<div id="warn"></div>
+<div class="sheets" id="sheets"></div>
+
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+(function () {
+  var CFG = window.HRIS_CONFIG || {}, LIFF = String(CFG.LIFF_ID || '').trim();
+  var real = /^\d{6,}-[A-Za-z0-9]+$/.test(LIFF);
+  // QR อันเดียว: เปิดระบบที่หน้าลงเวลา (มีปุ่มเข้างาน / ออกงาน และเมนูด้านล่างไปหน้าอื่น)
+  var url = 'https://liff.line.me/' + (real ? LIFF : '0000000000-SAMPLE');
+
+  function qr(u) {
+    if (typeof qrcode !== 'function') return '<div style="padding:30mm 0;color:#b42318">โหลดตัวสร้าง QR ไม่ได้ — ตรวจอินเทอร์เน็ตแล้วรีเฟรช</div>';
+    var q = qrcode(0, 'M'); q.addData(u); q.make();
+    return q.createSvgTag({ cellSize: 8, margin: 2, scalable: true }).replace('<svg ', '<svg role="img" aria-label="QR ' + u + '" ');
+  }
+
+  if (!real) {
+    document.getElementById('warn').innerHTML = '<div class="warn">⚠️ <b>QR ยังใช้จริงไม่ได้</b> — ยังไม่ได้ใส่ LIFF ID ในไฟล์ <code>web/config.js</code> หน้านี้แสดงเป็นตัวอย่างเท่านั้น ' +
+      'ใส่ LIFF ID (จาก LINE Developers → LINE Login channel → แท็บ LIFF) แล้วเปิดหน้านี้ใหม่ QR จะเป็นลิงก์จริงทันที</div>';
+  }
+
+  document.getElementById('sheets').innerHTML = '<section class="page">' + (real ? '' : '<div class="sample"><span>ตัวอย่าง</span></div>') +
+    '<div class="head"><img src="img/sparrow-logo-wine.png" alt="The Sparrow"><h1>The Sparrow HR</h1><div class="sub">ลงเวลาเข้า-ออกงาน · ปฏิทินกะ · ขอลา · สลิปเงินเดือน</div></div>' +
+    '<div class="tile"><h2>สแกนเพื่อลงเวลา<small>Scan to check in / out</small></h2><div class="qr">' + qr(url) + '</div></div>' +
+    '<ol class="steps">' +
+      '<li>สแกน QR ด้วยกล้องมือถือ หรือในแอป LINE (ค้นหา → สแกน)</li>' +
+      '<li>ครั้งแรกเท่านั้น: ล็อกอิน LINE แล้วกรอก <b>รหัสเข้าใช้งาน 6 หลัก</b> ที่ได้จาก HR</li>' +
+      '<li>อนุญาตให้เข้าถึงตำแหน่ง (Location) แล้วกดปุ่ม <b>เข้างาน</b> หรือ <b>ออกงาน</b> — ต้องอยู่ที่ร้าน</li>' +
+      '<li>ขอลา ดูปฏิทินกะ และสลิปเงินเดือน ได้จากเมนูด้านล่างของหน้าจอ</li>' +
+    '</ol>' +
+    '<div class="note">แต่ละคนเห็นเฉพาะข้อมูลของตัวเอง · รหัส 6 หลักใช้ได้ครั้งเดียว ห้ามให้ผู้อื่น · เปลี่ยนมือถือหรือบัญชี LINE ให้ขอรหัสใหม่จาก HR</div>' +
+    '<div class="foot">crafted by <img src="img/happy-human-ink.png" alt="Happy Human"></div></section>';
+})();
+</script>
+</body>
+</html>
