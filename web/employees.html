@@ -35,7 +35,7 @@ App.boot({ page: 'employees', role: 'manager', ready: function (me) {
       ['phone', 'โทรศัพท์', 'tel'], ['email', 'อีเมล', 'email'], ['address', 'ที่อยู่ปัจจุบัน', 'textarea'], ['emergencyContact', 'ผู้ติดต่อกรณีฉุกเฉิน (ชื่อ / ความสัมพันธ์ / เบอร์)']
     ],
     job: [
-      ['department', 'แผนก', 'select', ['ครัว (BOH)', 'หน้าร้าน (FOH)', 'แม่บ้าน', 'บริหาร', 'อื่น ๆ']], ['position', 'ตำแหน่ง'],
+      ['department', 'แผนก', 'select', ['ครัว (BOH)', 'หน้าร้าน (FOH)', 'แม่บ้าน', 'บริหาร', 'HR', 'อื่น ๆ']], ['position', 'ตำแหน่ง'],
       ['startDate', 'วันเริ่มงาน *', 'date'], ['probationEnd', 'วันครบทดลองงาน', 'date'], ['status', 'สถานะการจ้าง', 'map', STATUS], ['payType', 'ประเภทการจ้าง', 'map', PAY],
       ['wage', 'ค่าจ้าง (บาท/เดือน หรือ บาท/วัน)', 'number'], ['supervisorId', 'ผู้บังคับบัญชา', 'sup'],
       ['defaultShift', 'กะประจำ', 'shift'], ['offDays', 'วันหยุดประจำสัปดาห์', 'days'], ['halfDayOn', 'วันทำงานครึ่งวัน (กะ H 15:00–22:00)', 'map', { '1': 'จันทร์', '2': 'อังคาร', '3': 'พุธ', '4': 'พฤหัสบดี', '5': 'ศุกร์', '6': 'เสาร์', '0': 'อาทิตย์' }], ['role', 'สิทธิ์ในระบบ', 'map', ROLE], ['endDate', 'วันพ้นสภาพ', 'date'], ['note', 'หมายเหตุ', 'textarea']
