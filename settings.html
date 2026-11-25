@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ตั้งค่า — The Sparrow HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=EB+Garamond:ital,wght@0,500;1,500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="img/sparrow-mark-wine.png">
+<meta name="theme-color" content="#7a1c2b">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  .set-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; position: sticky; top: 72px; z-index: 5; background: var(--paper); padding: 6px 0; }
+  .set-nav a { text-decoration: none; font-size: 13px; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); }
+  .set-nav a:hover { border-color: var(--wine); color: var(--wine); }
+  .card[id^="s-"] { scroll-margin-top: 190px; }   /* ไม่ให้หัวข้อถูกแถบปุ่มลัดบัง (แถบขึ้น 2 บรรทัดบนมือถือ) */
+  .hint { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+  .switch { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; margin-bottom: 10px; }
+  .switch input { width: 20px; height: 20px; accent-color: var(--wine); flex: none; }
+  .switch .t { flex: 1; } .switch .t b { display: block; font-size: 14px; }
+  .edit-tbl input, .edit-tbl select { padding: 6px 8px; font-size: 13px; border-radius: 8px; min-width: 64px; }
+  .edit-tbl td { padding: 4px 5px; vertical-align: middle; }
+  .savebar { position: sticky; bottom: 70px; z-index: 6; display: flex; align-items: center; gap: 10px; background: var(--wine); color: #fff; padding: 10px 14px; border-radius: 14px; box-shadow: var(--shadow); margin-top: 8px; }
+  .savebar button { background: #fff; color: var(--wine); border-color: #fff; font-weight: 600; }
+  .linkcard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; text-decoration: none; color: var(--ink); }
+  .linkcard:hover { border-color: var(--wine); }
+  .ok-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; background: var(--ok); } .no-dot { background: var(--ink-3); }
+</style>
+</head>
+<body>
+<main id="main"></main>
+<script src="config.js"></script>
+<script src="js/app.js"></script>
+<script>
+/*
+ * หน้าตั้งค่าระบบ — เห็นและแก้ได้เฉพาะเจ้าของร้าน (owner) และ HR
+ * ร้านและจุดลงเวลา · เวลาทำงาน/OT · LINE · กะทำงาน · ประเภทวันลา · ลิงก์ไปวันหยุด/พนักงาน
+ * รหัสลับ (LINE Channel access token) ไม่แสดงในหน้านี้ เก็บใน Script Properties ของ Apps Script เท่านั้น
+ */
+App.boot({ page: 'settings', role: 'hr', ready: function (me) {
+  var main = App.$('#main'), wrap = App.h('<div class="wrap" style="max-width:900px"></div>'); main.appendChild(wrap);
+  var data, dirty = false;
+
+  function load() { App.loading(wrap); App.call('settings').then(function (d) { data = d; render(); }).catch(function () {}); }
+  function v(k) { return data.config[k] ? data.config[k].value : ''; }
+  function field(k, label, hint, type, extra) {
+    return '<div class="field"><label for="c_' + k + '">' + label + '</label><input autocomplete="off" id="c_' + k + '" data-c="' + k + '" type="' + (type || 'text') + '" value="' + App.esc(v(k)) + '"' + (extra || '') + '>' +
+      (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+  }
+  function toggle(k, title, desc, dflt) {
+    var on = (v(k) || dflt || 'no') === 'yes';
+    return '<label class="switch"><input type="checkbox" autocomplete="off" data-c="' + k + '" data-bool="1"' + (on ? ' checked' : '') + '><span class="t"><b>' + title + '</b><span class="sub">' + desc + '</span></span></label>';
+  }
+
+  function render() {
+    var mapUrl = v('shopLat') && v('shopLng') ? 'https://www.google.com/maps?q=' + encodeURIComponent(v('shopLat') + ',' + v('shopLng')) : '';
+    wrap.innerHTML =
+      '<div class="row" style="margin-bottom:6px"><div><h1>ตั้งค่าระบบ</h1><div class="sub">เห็นเฉพาะเจ้าของร้านและ HR · การแก้ไขถูกบันทึกใน AttendanceLog</div></div></div>' +
+      '<nav class="set-nav"><a href="#s-shop">ร้าน & จุดลงเวลา</a><a href="#s-time">เวลาทำงาน & OT</a><a href="#s-pay">เงินเดือน</a><a href="#s-items">ค่าจ้างอื่น และสวัสดิการ</a><a href="#s-line">เข้าสู่ระบบ</a><a href="#s-shift">กะทำงาน</a><a href="#s-leave">ประเภทวันลา</a><a href="#s-news">ข่าวสาร</a><a href="#s-more">อื่น ๆ</a></nav>' +
+
+      '<div class="card" id="s-shop"><h2>ร้าน & จุดลงเวลา</h2><div class="grid g2">' +
+        field('shopName', 'ชื่อร้าน') + field('payerName', 'ชื่อผู้มีหน้าที่หักภาษี (ใบ 50 ทวิ)', 'ชื่อร้าน/บริษัท ตามที่จดทะเบียนกับกรมสรรพากร') +
+        field('payerTaxId', 'เลขประจำตัวผู้เสียภาษีอากร 13 หลัก', 'ใช้ในใบ 50 ทวิ', 'text', ' inputmode="numeric"') + field('payerAddress', 'ที่อยู่ผู้มีหน้าที่หักภาษี', 'ใช้ในใบ 50 ทวิ') +
+        field('shopLat', 'ละติจูดร้าน', 'คลิกขวาที่หมุดร้านใน Google Maps → คัดลอกตัวเลขแรก', 'text', ' inputmode="decimal"') +
+        field('shopLng', 'ลองจิจูดร้าน', 'ตัวเลขที่สอง', 'text', ' inputmode="decimal"') +
+        field('radiusM', 'รัศมีที่ลงเวลาได้ (เมตร)', 'แนะนำ 100 ม.', 'number', ' min="20" max="2000"') +
+        field('maxAccuracyM', 'ความคลาดเคลื่อน GPS สูงสุด (เมตร)', 'ถ้า GPS ไม่แม่นกว่านี้ จะให้ลองใหม่', 'number') +
+      '</div><div class="row"><button class="sm" id="here">📍 ใช้ตำแหน่งปัจจุบันของฉันเป็นจุดร้าน</button>' + (mapUrl ? '<a class="btn sm" target="_blank" rel="noopener" href="' + mapUrl + '">ดูบน Google Maps</a>' : '') + '</div></div>' +
+
+      '<div class="card" id="s-time"><h2>เวลาทำงาน & OT</h2><div class="grid g2">' +
+        field('earliestCheckinMin', 'กดเข้างานได้ก่อนเริ่มกะไม่เกิน (นาที)', 'มาก่อนกะไม่นับเป็นเวลาทำงานหรือ OT', 'number') +
+        field('hoursPerDay', 'ชั่วโมงทำงานปกติต่อวัน', 'ใช้คิดค่าจ้างต่อชั่วโมง: เงินเดือน ÷ 30 ÷ ชม. หรือ ค่าแรงรายวัน ÷ ชม.', 'number') +
+        field('otRoundMin', 'คิด OT ละเอียดทีละ (นาที)', '1 = ทุกนาที (อยู่เกิน 28 นาที นับ 28 นาที) · 15 หรือ 30 = ปัดลง', 'number') +
+        field('overstayNotifyMin', 'ออกงานเกินกะกี่นาที จึงส่งขออนุมัติ OT อัตโนมัติ', 'น้อยกว่านี้ไม่ส่งแจ้งเตือน แต่หัวหน้ายังอนุมัติได้ในหน้าอนุมัติ', 'number') +
+        field('lateLimitPerYear', 'มาสายได้ไม่เกิน (ครั้ง/ปี)', 'เกินนี้ Dashboard แจ้งให้ออกหนังสือตักเตือน', 'number') +
+      '</div></div>' +
+
+      '<div class="card" id="s-pay"><h2>เงินเดือน</h2><p class="sub" style="margin-top:-4px">ใช้ในรายงานเงินเดือน · <a href="' + App.link('payroll.html') + '">เปิดรายงานเงินเดือน</a></p>' +
+        '<div class="grid g2">' +
+          field('mealAllowance', 'ค่าอาหารต่อเดือน (บาท)', 'ข้อบังคับฯ: ไม่เกิน 1,500 บาท/เดือน จ่ายตามสัดส่วนวันที่มาทำงานจริง · 0 = ไม่จ่าย', 'number') +
+          field('ssoRate', 'อัตราประกันสังคม (%)', 'ปกติ 5%', 'number', ' step="0.1"') +
+          field('ssoMin', 'ฐานค่าจ้างต่ำสุด (บาท)', 'ปกติ 1,650', 'number') +
+          field('ssoCap', 'ฐานค่าจ้างสูงสุด (บาท)', 'ตรวจกับประกาศสำนักงานประกันสังคมปีปัจจุบัน', 'number') +
+          field('attBonus', 'เบี้ยขยัน (บาท/เดือน)', 'ใช้เมื่อติ๊ก "เบี้ยขยัน" ในส่วนค่าจ้างอื่น และสวัสดิการ · ได้เมื่อไม่ขาด ไม่ลาไม่รับค่าจ้าง และสายไม่เกินเกณฑ์', 'number') +
+          field('attBonusLateMax', 'เบี้ยขยัน: สายรวมไม่เกิน (นาที/เดือน)', '', 'number') +
+        '</div><div class="hr"></div><h3>ภาษีเงินได้หัก ณ ที่จ่าย (ภ.ง.ด.1)</h3>' +
+        toggle('taxAuto', 'คำนวณภาษีอัตโนมัติ (เบื้องต้น)', 'เงินได้ประจำ × 12 − ค่าใช้จ่าย − ลดหย่อนส่วนตัว − ประกันสังคม แล้วคิดตามขั้นบันได 0–35% ÷ 12 · ไม่คำนวณลดหย่อนอื่น · โบนัสคิดเพิ่มเฉพาะเดือนที่จ่าย · กรอกเองในรายงานได้') +
+        '<div class="grid g3">' +
+          field('taxExpenseRate', 'หักค่าใช้จ่าย (%)', 'ปกติ 50%', 'number') + field('taxExpenseCap', 'หักค่าใช้จ่ายสูงสุด (บาท/ปี)', 'ปกติ 100,000', 'number') +
+          field('taxPersonal', 'ลดหย่อนส่วนตัว (บาท/ปี)', 'ปกติ 60,000', 'number') +
+        '</div><p class="sub">ภาษีเบื้องต้นเท่านั้น ลดหย่อนอื่น (คู่สมรส บุตร ประกันชีวิต ฯลฯ) พนักงานใช้สิทธิ์เองตอนยื่นแบบประจำปี · ตรวจอัตรากับประกาศกรมสรรพากรปีปัจจุบัน</p></div>' +
+
+      '<div class="card" id="s-items"><h2>ค่าจ้างอื่น และสวัสดิการ</h2><p class="sub" style="margin-top:-4px">ติ๊ก = ใช้ · ไม่ติ๊ก = ไม่คำนวณ และไม่แสดงในรายงานเงินเดือน แฟ้มพนักงาน และสลิป (ข้อมูลที่กรอกไว้ไม่หาย เปิดกลับมาใช้ได้) · ค่าจ้าง (เงินเดือน / ค่าแรงรายวัน) ใช้เสมอ</p>' +
+        '<h3>รายการหลักของร้าน</h3><div class="grid g2">' +
+          toggle('useOT', 'ค่าล่วงเวลา (OT) และค่าทำงานวันหยุด', 'คิดจากใบขอ OT ที่อนุมัติ · OT 1.5 เท่า · ทำงานวันหยุด 1 / 2 เท่า · OT วันหยุด 3 เท่า', 'yes') +
+          toggle('useMeal', 'ค่าอาหาร', 'จำนวนเงินตั้งที่ส่วนเงินเดือนด้านบน · จ่ายตามสัดส่วนวันที่มาทำงาน', 'yes') +
+          toggle('useServiceCharge', 'Service charge', 'กรอกยอดรวมในหน้ารายงานเงินเดือน แบ่งตามวันที่มาทำงาน', 'yes') +
+          toggle('useTips', 'ทิป', 'กรอกยอดรวมในหน้ารายงานเงินเดือน แบ่งตามวันที่มาทำงาน', 'yes') +
+          toggle('useBonus', 'โบนัส / คอมมิชชั่น', 'ช่องกรอกรายเดือนในรายงานเงินเดือน', 'yes') +
+          toggle('useAbsenceDeduct', 'หักขาดงาน / ลาไม่ได้รับค่าจ้าง', 'พนักงานรายเดือน หักวันละ เงินเดือน ÷ 30', 'yes') +
+          toggle('payDeductLate', 'หักมาสาย / กลับก่อน', 'หักตามนาทีที่ไม่ได้ทำงาน', 'yes') +
+          toggle('ssoEnabled', 'ประกันสังคม (หักส่วนพนักงาน)', 'ร้านต้องสมทบส่วนนายจ้างเท่ากัน · อัตราและฐานตั้งที่ส่วนเงินเดือนด้านบน', 'yes') +
+          toggle('useTax', 'ภาษีหัก ณ ที่จ่าย (ภ.ง.ด.1)', 'วิธีคำนวณตั้งที่ส่วนเงินเดือนด้านบน', 'yes') +
+          toggle('useOtherDeduct', 'หักอื่น ๆ', 'ช่องกรอกรายเดือนในรายงานเงินเดือน', 'yes') +
+        '</div><div class="hr"></div><h3>รายการเสริม</h3><div class="grid g2">' +
+          toggle('usePositionAllowance', 'ค่าตำแหน่ง', 'กรอกรายคนในแฟ้มพนักงาน · นับเป็นฐานประกันสังคม') +
+          toggle('useFixedAllowance', 'ค่าโทรศัพท์ / เดินทางประจำ', 'กรอกรายคนในแฟ้มพนักงาน · ไม่นับฐานประกันสังคม') +
+          toggle('useAttBonus', 'เบี้ยขยัน', 'ตั้งจำนวนเงินและเกณฑ์มาสายที่ส่วนเงินเดือน') +
+          toggle('usePvd', 'กองทุนสำรองเลี้ยงชีพ', 'ตั้ง % รายคนในแฟ้มพนักงาน (ไม่ใช่ประกันสังคม)') +
+          toggle('useOtherIncome', 'รายได้อื่น', 'ช่องกรอกรายเดือนในรายงานเงินเดือน') +
+          toggle('useAdvance', 'เบิกเงินล่วงหน้า', 'ช่องกรอกรายเดือนในรายงานเงินเดือน') +
+          toggle('useLoan', 'เงินกู้ กยศ. / สหกรณ์', 'ช่องกรอกรายเดือนในรายงานเงินเดือน') +
+        '</div></div>' +
+
+      '<div class="card" id="s-line"><h2>เข้าสู่ระบบด้วย LINE</h2>' +
+        '<p class="sub" style="margin-top:-4px">ระบบใช้ LINE เพื่อยืนยันตัวตนตอนเข้าสู่ระบบเท่านั้น <b>ไม่ส่งข้อความ LINE ใด ๆ จึงไม่มีค่าใช้จ่าย</b> · แจ้งเตือนทั้งหมดอยู่ที่กระดิ่งในเว็บ</p>' +
+        '<div class="grid g2">' +
+          field('liffId', 'LIFF ID', 'จาก LINE Developers → LINE Login channel → LIFF') +
+          field('lineLoginChannelId', 'LINE Login Channel ID', 'ใช้ตรวจสอบการเข้าสู่ระบบ') +
+        '</div><div class="hr"></div><div class="row" style="align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>QR code สำหรับพนักงาน</b>' +
+        '<div class="sub">QR อันเดียว A4 1 แผ่น ติดที่ร้าน ใช้แทนปุ่ม Rich menu (ไม่ต้องมี LINE OA) · สแกนแล้วเข้าหน้าลงเวลา และไปเมนูอื่นจากแถบด้านล่าง · QR ใช้ LIFF ID จากไฟล์ web/config.js</div></div>' +
+        '<a class="btn" href="' + App.link('qr.html') + '" target="_blank" rel="noopener">🖨 พิมพ์ QR code</a></div></div>' +
+
+      '<div class="card" id="s-shift"><h2>กะทำงาน</h2><p class="sub" style="margin-top:-4px">ข้อบังคับฯ หมวด 03 · ผ่อนผันมาสาย = นาทีที่ยังไม่นับสาย (0 = นับตั้งแต่นาทีแรก) · กะที่ยังใช้อยู่ในตารางลบไม่ได้</p>' +
+        '<div class="tbl-wrap"><table class="edit-tbl"><thead><tr><th>รหัส</th><th>ชื่อกะ</th><th>เข้า</th><th>ออก</th><th>พักเริ่ม</th><th>พักจบ</th><th>ผ่อนผันสาย (นาที)</th><th></th></tr></thead><tbody id="shiftRows"></tbody></table></div>' +
+        '<button class="sm" id="addShift" style="margin-top:8px">+ เพิ่มกะ</button></div>' +
+
+      '<div class="card" id="s-leave"><h2>ประเภทวันลา</h2><p class="sub" style="margin-top:-4px">ข้อบังคับฯ หมวด 09 · สิทธิ์ 0 = ไม่กำหนดจำนวนวัน · อายุงานขั้นต่ำ 365 = ใช้ได้เมื่อทำงานครบ 1 ปี · สิทธิ์ตามกฎหมายห้ามตั้งต่ำกว่าที่กฎหมายกำหนด</p>' +
+        '<div class="tbl-wrap"><table class="edit-tbl"><thead><tr><th>รหัส</th><th>ชื่อ</th><th>สิทธิ์/ปี</th><th>ค่าจ้าง</th><th>แจ้งล่วงหน้า (วัน)</th><th>ต้องมีเอกสารเมื่อลา ≥ (วัน)</th><th>อายุงานขั้นต่ำ (วัน)</th><th>ติดกันสูงสุด</th><th>หมายเหตุ</th><th></th></tr></thead><tbody id="leaveRows"></tbody></table></div>' +
+        '<button class="sm" id="addLeave" style="margin-top:8px">+ เพิ่มประเภทลา</button></div>' +
+
+      '<div class="card" id="s-news"><div class="row" style="margin-bottom:6px"><h2 style="flex:1;margin:0">ข่าวสาร / ประกาศ</h2><button class="accent sm" id="addNews">+ เขียนข่าวใหม่</button></div>' +
+        '<p class="sub" style="margin-top:0">พนักงานเห็นในเมนู "ข่าวสาร" และกระดิ่งแจ้งเตือน · บันทึกแยกจากปุ่มบันทึกการตั้งค่า </p><div id="newsList"></div></div>' +
+      '<div class="card" id="s-more"><h2>อื่น ๆ</h2><div class="grid g2">' +
+        '<a class="linkcard" href="' + App.link('schedule.html') + (App.link('schedule.html').indexOf('?') > 0 ? '&' : '?') + 'tab=hol"><span style="font-size:22px">🗓</span><span><b>วันหยุดตามประเพณี</b><div class="sub">' + data.counts.holidays + ' วัน · Day off / สลับหยุดชดเชย / กำหนดรายคน</div></span></a>' +
+        '<a class="linkcard" href="' + App.link('employees.html') + '"><span style="font-size:22px">👥</span><span><b>พนักงาน & สิทธิ์ในระบบ</b><div class="sub">' + data.counts.employees + ' คน · ตั้ง role (พนักงาน / หัวหน้า / HR / เจ้าของ) · กะประจำ</div></span></a>' +
+        '<a class="linkcard" href="' + App.link('payroll.html') + '"><span style="font-size:22px">💰</span><span><b>รายงานเงินเดือน</b><div class="sub">คำนวณรายเดือน · ส่งออก CSV · พิมพ์สลิป</div></span></a>' +
+      '</div></div>' +
+      '<div class="savebar" id="savebar" style="display:none"><span style="flex:1">มีการแก้ไขที่ยังไม่บันทึก</span><button id="discard" class="sm" style="background:transparent;color:#fff;border-color:rgba(255,255,255,.5)">ยกเลิก</button><button id="save">บันทึกการตั้งค่า</button></div>';
+
+    renderShifts(); renderLeaves(); loadNews();
+    App.$('#addNews').onclick = function () { editNews({ category: 'general', audience: 'all', pinned: 'no', startDate: news.today }); };
+    App.$$('[data-c]', wrap).forEach(function (el) { el.addEventListener('input', markDirty); el.addEventListener('change', markDirty); });
+    App.$('#addShift').onclick = function () { readTables(); data.shifts.push({ code: '', name: '', start: '', end: '', breakStart: '', breakEnd: '', graceMin: 0, used: 0 }); renderShifts(); markDirty(); };
+    App.$('#addLeave').onclick = function () { readTables(); data.policies.push({ type: '', name: '', daysPerYear: 0, paid: 'ได้รับค่าจ้าง', noticeDays: 0, docAfterDays: 0, minServiceDays: 0, maxConsecutive: 0, note: '' }); renderLeaves(); markDirty(); };
+    App.$('#here').onclick = useHere;
+    App.$('#save').onclick = save;
+    App.$('#discard').onclick = function () { dirty = false; load(); };
+  }
+  // ---------------------------------------------------------------- ข่าวสาร
+  var news = { items: [], categories: {}, departments: [], today: me.now.date };
+  function loadNews() { App.call('newsAdmin').then(function (d) { news = d; renderNews(); }).catch(function () {}); }
+  function newsState(n) {
+    if (n.startDate && n.startDate > news.today) return '<span class="badge b-late">ตั้งเวลาไว้ ' + App.dateTH(n.startDate) + '</span>';
+    if (n.endDate && n.endDate < news.today) return '<span class="badge">หมดเวลาแสดงแล้ว</span>';
+    return '<span class="badge b-present">กำลังแสดง</span>';
+  }
+  function renderNews() {
+    App.$('#newsList').innerHTML = news.items.length ? news.items.map(function (n, i) {
+      return '<div class="item"><div class="grow">' + (n.pinned === 'yes' ? '📌 ' : '') + '<b>' + App.esc(n.title) + '</b> ' + newsState(n) +
+        '<div class="sub">' + App.esc(news.categories[n.category] || 'ทั่วไป') + ' · ถึง ' + (n.audience && n.audience !== 'all' ? App.esc(n.audience) : 'ทุกคน') +
+        ' · ' + App.dateTH(n.startDate) + (n.endDate ? ' – ' + App.dateTH(n.endDate) : '') + '</div>' +
+        '<div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px">' + App.esc(String(n.body).replace(/\s+/g, ' ')) + '</div></div>' +
+        '<div class="row" style="flex-wrap:nowrap"><button class="sm" data-ne="' + i + '">แก้ไข</button><button class="sm bad" data-nd="' + i + '">ลบ</button></div></div>';
+    }).join('') : '<div class="empty">ยังไม่มีข่าว</div>';
+    App.$$('[data-ne]').forEach(function (b) { b.onclick = function () { editNews(news.items[+b.getAttribute('data-ne')]); }; });
+    App.$$('[data-nd]').forEach(function (b) { b.onclick = function () {
+      var n = news.items[+b.getAttribute('data-nd')];
+      if (!confirm('ลบข่าว "' + n.title + '" ?')) return;
+      App.call('newsDelete', { id: n.id }).then(function () { App.toast('ลบข่าวแล้ว'); loadNews(); }).catch(function () {});
+    }; });
+  }
+  function editNews(n) {
+    var cats = Object.keys(news.categories).map(function (k) { return '<option value="' + k + '"' + (k === n.category ? ' selected' : '') + '>' + news.categories[k] + '</option>'; }).join('');
+    var aud = '<option value="all">ทุกคน</option>' + news.departments.map(function (d) { return '<option' + (d === n.audience ? ' selected' : '') + '>' + App.esc(d) + '</option>'; }).join('');
+    var m = App.modal(n.id ? 'แก้ไขข่าว' : 'เขียนข่าวใหม่',
+      '<div class="card"><div class="field"><label>หัวข้อ *</label><input id="nt" maxlength="150" value="' + App.esc(n.title || '') + '" placeholder="เช่น ปิดร้านวันที่ 5 ธ.ค. / เมนูใหม่เดือนนี้"></div>' +
+      '<div class="grid g2"><div class="field"><label>ประเภท</label><select id="nc">' + cats + '</select></div><div class="field"><label>ส่งถึง</label><select id="na">' + aud + '</select></div>' +
+      '<div class="field"><label>เริ่มแสดง</label><input type="date" id="ns" value="' + (n.startDate || news.today) + '"></div><div class="field"><label>แสดงถึง (เว้นว่าง = ไม่หมดอายุ)</label><input type="date" id="nx" value="' + (n.endDate || '') + '"></div></div>' +
+      '<label class="switch"><input type="checkbox" id="np" autocomplete="off"' + (n.pinned === 'yes' ? ' checked' : '') + '><span class="t"><b>ปักหมุดไว้บนสุด</b><span class="sub">ใช้กับประกาศสำคัญที่ทุกคนต้องเห็น</span></span></label>' +
+      '<div class="field"><label>เนื้อหา *</label><textarea id="nb" rows="9" maxlength="5000" style="min-height:180px" placeholder="พิมพ์เนื้อหา ขึ้นบรรทัดใหม่ได้ ใส่ลิงก์ได้ (https://...)">' + App.esc(n.body || '') + '</textarea></div>' +
+      '<div class="row"><span class="sub" id="ncount"></span><div class="spacer"></div><button class="accent" id="nsave">' + (n.id ? 'บันทึกการแก้ไข' : 'เผยแพร่') + '</button></div></div>');
+    if (n.audience) App.$('#na', m.el).value = n.audience;
+    var cnt = function () { App.$('#ncount', m.el).textContent = App.$('#nb', m.el).value.length + ' / 5000 ตัวอักษร'; }; App.$('#nb', m.el).oninput = cnt; cnt();
+    App.$('#nsave', m.el).onclick = function () {
+      var btn = this; btn.disabled = true;
+      App.call('newsSave', { item: { id: n.id, title: App.$('#nt', m.el).value, body: App.$('#nb', m.el).value, category: App.$('#nc', m.el).value, audience: App.$('#na', m.el).value,
+        pinned: App.$('#np', m.el).checked ? 'yes' : 'no', startDate: App.$('#ns', m.el).value, endDate: App.$('#nx', m.el).value } })
+        .then(function () { App.toast(n.id ? 'บันทึกข่าวแล้ว' : 'เผยแพร่ข่าวแล้ว'); m.close(); loadNews(); })
+        .catch(function () { btn.disabled = false; });
+    };
+  }
+
+
+  function cell(val, attr, type, w) { return '<td><input ' + attr + ' type="' + (type || 'text') + '" value="' + App.esc(val === undefined ? '' : val) + '"' + (w ? ' style="width:' + w + 'px"' : '') + '></td>'; }
+  function renderShifts() {
+    App.$('#shiftRows').innerHTML = data.shifts.map(function (s, i) {
+      return '<tr data-i="' + i + '">' + cell(s.code, 'data-f="code"', 'text', 60) + cell(s.name, 'data-f="name"', 'text', 120) + cell(s.start, 'data-f="start"', 'time') + cell(s.end, 'data-f="end"', 'time') +
+        cell(s.breakStart, 'data-f="breakStart"', 'time') + cell(s.breakEnd, 'data-f="breakEnd"', 'time') + cell(s.graceMin, 'data-f="graceMin"', 'number', 70) +
+        '<td>' + (s.used ? '<span class="sub">ใช้ ' + s.used + ' ช่อง</span>' : '<button class="sm bad" data-delshift="' + i + '">ลบ</button>') + '</td></tr>';
+    }).join('');
+    App.$$('#shiftRows input').forEach(function (el) { el.addEventListener('input', markDirty); });
+    App.$$('[data-delshift]').forEach(function (b) { b.onclick = function () { readTables(); data.shifts.splice(+b.getAttribute('data-delshift'), 1); renderShifts(); markDirty(); }; });
+  }
+  function renderLeaves() {
+    App.$('#leaveRows').innerHTML = data.policies.map(function (p, i) {
+      return '<tr data-i="' + i + '">' + cell(p.type, 'data-f="type"', 'text', 90) + cell(p.name, 'data-f="name"', 'text', 130) + cell(p.daysPerYear, 'data-f="daysPerYear"', 'number', 64) +
+        cell(p.paid, 'data-f="paid"', 'text', 130) + cell(p.noticeDays, 'data-f="noticeDays"', 'number', 64) + cell(p.docAfterDays, 'data-f="docAfterDays"', 'number', 64) +
+        cell(p.minServiceDays, 'data-f="minServiceDays"', 'number', 70) + cell(p.maxConsecutive, 'data-f="maxConsecutive"', 'number', 64) + cell(p.note, 'data-f="note"', 'text', 200) +
+        '<td><button class="sm bad" data-delleave="' + i + '">ลบ</button></td></tr>';
+    }).join('');
+    App.$$('#leaveRows input').forEach(function (el) { el.addEventListener('input', markDirty); });
+    App.$$('[data-delleave]').forEach(function (b) { b.onclick = function () { if (!confirm('ลบประเภทลานี้? ใบลาเดิมของประเภทนี้จะไม่ถูกนับสิทธิ์')) return; readTables(); data.policies.splice(+b.getAttribute('data-delleave'), 1); renderLeaves(); markDirty(); }; });
+  }
+  function readTables() {
+    App.$$('#shiftRows tr').forEach(function (tr) { var s = data.shifts[+tr.getAttribute('data-i')]; App.$$('input', tr).forEach(function (el) { s[el.getAttribute('data-f')] = el.value.trim(); }); });
+    App.$$('#leaveRows tr').forEach(function (tr) { var p = data.policies[+tr.getAttribute('data-i')]; App.$$('input', tr).forEach(function (el) { p[el.getAttribute('data-f')] = el.value.trim(); }); });
+  }
+  function markDirty() { dirty = true; App.$('#savebar').style.display = 'flex'; }
+  window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  function useHere() {
+    var go = function (pos) {
+      App.$('[data-c="shopLat"]').value = pos.coords.latitude.toFixed(6); App.$('[data-c="shopLng"]').value = pos.coords.longitude.toFixed(6); markDirty();
+      App.toast('ใส่ตำแหน่งแล้ว (±' + Math.round(pos.coords.accuracy) + ' ม.) กดบันทึกเพื่อใช้งาน');
+    };
+    if (App.DEMO) return window.HRIS_DEMO.position().then(go);
+    if (!navigator.geolocation) return App.toast('อุปกรณ์นี้ไม่รองรับ GPS', true);
+    navigator.geolocation.getCurrentPosition(go, function () { App.toast('หาตำแหน่งไม่ได้ กรุณาอนุญาตการเข้าถึงตำแหน่ง', true); }, { enableHighAccuracy: true, timeout: 15000 });
+  }
+
+  function save() {
+    readTables();
+    var cfg = {};
+    App.$$('[data-c]', wrap).forEach(function (el) { cfg[el.getAttribute('data-c')] = el.getAttribute('data-bool') ? (el.checked ? 'yes' : 'no') : el.value.trim(); });
+    var shifts = data.shifts.map(function (s) { return { code: s.code, name: s.name, start: s.start, end: s.end, breakStart: s.breakStart, breakEnd: s.breakEnd, graceMin: s.graceMin }; });
+    var policies = data.policies.map(function (p) { var o = {}; ['type', 'name', 'daysPerYear', 'paid', 'noticeDays', 'docAfterDays', 'minServiceDays', 'maxConsecutive', 'note'].forEach(function (k) { o[k] = p[k]; }); return o; });
+    var btn = App.$('#save'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+    App.api('settingsSave', { config: cfg, shifts: shifts, policies: policies }).then(function (res) {
+      btn.disabled = false; btn.textContent = 'บันทึกการตั้งค่า';
+      if (!res.ok) { App.modal('บันทึกไม่สำเร็จ', '<div class="errbox" style="white-space:pre-line">' + App.esc(res.error) + '</div>'); return; }
+      dirty = false; App.toast('บันทึกการตั้งค่าแล้ว'); load();
+    });
+  }
+
+  load();
+} });
+</script>
+</body>
+</html>
