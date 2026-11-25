@@ -289,6 +289,11 @@
       }
       return api('me').then(function (res) {
         if (!res.ok) { if (res.needBind) return showBind(); main.innerHTML = '<div class="wrap narrow"><div class="errbox">' + esc(res.error) + '</div></div>'; return; }
+        if (!res.data || !res.data.user) {   // เซิร์ฟเวอร์ตอบกลับไม่ใช่ข้อมูลผู้ใช้ (เช่น การตั้งค่า Deploy ผิด) — แสดงสิ่งที่ได้รับเพื่อหาสาเหตุ
+          main.innerHTML = '<div class="wrap narrow"><div class="errbox">เซิร์ฟเวอร์ตอบกลับไม่ครบ กรุณาตรวจการตั้งค่า Deploy (Execute as: Me · Who has access: Anyone)<br><small>' +
+            esc(JSON.stringify(res).slice(0, 200)) + '</small></div></div>';
+          return;
+        }
         meSave(res.data);
         start(res.data);
       });
