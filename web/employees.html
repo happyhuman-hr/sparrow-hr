@@ -35,10 +35,10 @@ App.boot({ page: 'employees', role: 'manager', ready: function (me) {
       ['phone', 'โทรศัพท์', 'tel'], ['email', 'อีเมล', 'email'], ['address', 'ที่อยู่ปัจจุบัน', 'textarea'], ['emergencyContact', 'ผู้ติดต่อกรณีฉุกเฉิน (ชื่อ / ความสัมพันธ์ / เบอร์)']
     ],
     job: [
-      ['department', 'แผนก', 'select', ['ครัว (BOH)', 'หน้าร้าน (FOH)', 'แม่บ้าน', 'บริหาร', 'HR', 'อื่น ๆ']], ['position', 'ตำแหน่ง'],
+      ['department', 'แผนก', 'select', ['ครัว (BOH)', 'หน้าร้าน (FOH)', 'แม่บ้าน', 'บริหาร', 'HR', 'อื่น ๆ']], ['position', 'ตำแหน่ง', 'position'],
       ['startDate', 'วันเริ่มงาน *', 'date'], ['probationEnd', 'วันครบทดลองงาน', 'date'], ['status', 'สถานะการจ้าง', 'map', STATUS], ['payType', 'ประเภทการจ้าง', 'map', PAY],
       ['wage', 'ค่าจ้าง (บาท/เดือน หรือ บาท/วัน)', 'number'], ['supervisorId', 'ผู้บังคับบัญชา', 'sup'],
-      ['defaultShift', 'กะประจำ', 'shift'], ['offDays', 'วันหยุดประจำสัปดาห์', 'days'], ['halfDayOn', 'วันทำงานครึ่งวัน (กะ H 15:00–22:00)', 'map', { '1': 'จันทร์', '2': 'อังคาร', '3': 'พุธ', '4': 'พฤหัสบดี', '5': 'ศุกร์', '6': 'เสาร์', '0': 'อาทิตย์' }], ['role', 'สิทธิ์ในระบบ', 'map', ROLE], ['endDate', 'วันพ้นสภาพ', 'date'], ['note', 'หมายเหตุ', 'textarea']
+      ['defaultShift', 'กะประจำ', 'shift'], ['offDays', 'วันหยุดประจำสัปดาห์', 'days'], ['halfDayOn', 'วันทำงานครึ่งวัน (กะ H 15:00–22:00)', 'map', { '1': 'จันทร์', '2': 'อังคาร', '3': 'พุธ', '4': 'พฤหัสบดี', '5': 'ศุกร์', '6': 'เสาร์', '0': 'อาทิตย์' }], ['role', 'สิทธิ์ในระบบ', 'map', ROLE], ['approveScope', 'หัวหน้างานอนุมัติได้', 'scope'], ['endDate', 'วันพ้นสภาพ', 'date'], ['note', 'หมายเหตุ', 'textarea']
     ],
     pay: [
       ['positionAllowance', 'ค่าตำแหน่ง (บาท/เดือน)', 'number'], ['fixedAllowance', 'ค่าโทรศัพท์/เดินทางประจำ (บาท/เดือน)', 'number'],
@@ -77,11 +77,31 @@ App.boot({ page: 'employees', role: 'manager', ready: function (me) {
     App.$$('tr[data-id]', wrap).forEach(function (tr) { tr.onclick = function () { open(tr.getAttribute('data-id')); }; });
   }
 
+  /** ตำแหน่งงานของร้าน (จากรายชื่อพนักงาน The Sparrow) แยกตามแผนก · เลือกตำแหน่งแล้วเติมแผนกให้อัตโนมัติ */
+  var POSITIONS = {
+    'บริหาร': ['ผู้จัดการทั่วไป'],
+    'HR': ['HR', 'HR outsource (Happy Human)'],
+    'ครัว (BOH)': ['Executive Chef', 'Demi Chef', 'Hot Kitchen Commis', 'Cold Kitchen Commis'],
+    'หน้าร้าน (FOH)': ['Restaurant Manager', 'FOH staff'],
+    'แม่บ้าน': ['แม่บ้าน']
+  };
+  function deptOfPosition(p) { for (var d in POSITIONS) if (POSITIONS[d].indexOf(p) >= 0) return d; return ''; }
   function input(f, val, ro) {
     var k = f[0], type = f[2] || 'text', v = val === undefined || val === null ? '' : val, dis = ro ? ' disabled' : '';
     var lab = '<label for="f_' + k + '">' + f[1] + '</label>';
     if (type === 'select') return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + '><option value=""></option>' + f[3].map(function (o) { return '<option' + (o === v ? ' selected' : '') + '>' + o + '</option>'; }).join('') + (v && f[3].indexOf(v) < 0 ? '<option selected>' + App.esc(v) + '</option>' : '') + '</select>';
     if (type === 'map') return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + '><option value=""></option>' + Object.keys(f[3]).map(function (o) { return '<option value="' + o + '"' + (o === v ? ' selected' : '') + '>' + f[3][o] + '</option>'; }).join('') + '</select>';
+    if (type === 'position') {
+      var known = !!deptOfPosition(v);
+      return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + ' onchange="var dep=document.getElementById(\'f_department\'),o=this.selectedOptions[0],g=o&&o.parentNode.label;if(dep&&g&&[].some.call(dep.options,function(x){return x.value===g}))dep.value=g;"><option value=""></option>' +
+        Object.keys(POSITIONS).map(function (d) { return '<optgroup label="' + d + '">' + POSITIONS[d].map(function (o) { return '<option' + (o === v ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</optgroup>'; }).join('') +
+        (v && !known ? '<optgroup label="ตำแหน่งเดิม (ไม่อยู่ในรายการ)"><option selected>' + App.esc(v) + '</option></optgroup>' : '') + '</select>';
+    }
+    if (type === 'scope') {
+      var cur = String(v || '').toLowerCase(), opts = [['', 'ใบลาและ OT'], ['ot', 'OT อย่างเดียว'], ['leave', 'ใบลาอย่างเดียว']];
+      return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + '>' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+        '<div class="sub">ใช้กับสิทธิ์ หัวหน้างาน เท่านั้น · อนุมัติเฉพาะลูกทีม (คนที่ใส่ชื่อนี้เป็นผู้บังคับบัญชา) · เรื่องที่อนุมัติไม่ได้จะไปรอเจ้าของร้าน / HR</div>';
+    }
     if (type === 'sc') { var no = String(v) === '0'; return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + '><option value=""' + (no ? '' : ' selected') + '>ได้รับ (ตามจำนวนวันที่มาทำงาน)</option><option value="0"' + (no ? ' selected' : '') + '>ไม่ได้รับ</option></select>'; }
     if (type === 'shift') return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + '><option value="">— ไม่กำหนด —</option>' + (data.shifts || []).map(function (s) { return '<option value="' + s.code + '"' + (s.code === v ? ' selected' : '') + '>' + s.code + ' · ' + s.start + '–' + s.end + '</option>'; }).join('') + '</select><div class="sub">ใช้เป็นค่าเริ่มต้นในตารางกะ แก้รายวันได้ที่หน้าตารางกะ</div>';
     if (type === 'days') return lab + daysPicker(k, v, ro);
@@ -118,7 +138,7 @@ App.boot({ page: 'employees', role: 'manager', ready: function (me) {
         (id ? '<div class="row" style="margin-bottom:12px"><span class="badge">' + e.id + '</span><span class="sub">อายุงาน ' + (e.tenure ? e.tenure.text : '-') + '</span><div class="spacer"></div>' +
           '<a class="btn sm" href="' + App.link('my.html') + (App.link('my.html').indexOf('?') > 0 ? '&' : '?') + 'emp=' + e.id + '">ปฏิทิน / เวลาทำงาน</a></div>' : '') +
         '<fieldset><legend>1. ข้อมูลส่วนตัว</legend>' + fields(F.personal, e, ro) + '</fieldset>' +
-        '<fieldset><legend>2. การจ้างงาน</legend>' + fields(F.job.filter(function (f) { return data.canEdit || (f[0] !== 'wage' && f[0] !== 'role'); }), e, ro) + '</fieldset>' +
+        '<fieldset><legend>2. การจ้างงาน</legend>' + fields(F.job.filter(function (f) { return data.canEdit || (f[0] !== 'wage' && f[0] !== 'role' && f[0] !== 'approveScope'); }), e, ro) + '</fieldset>' +
         (data.canEdit ? '<fieldset><legend>3. เงินเดือนและภาษี</legend><p class="sub" style="margin-top:0">ใช้ในรายงานเงินเดือน: Service charge / ทิป แบ่งตามจำนวนวันที่มาทำงานจริง (เลือก "ไม่ได้รับ" สำหรับคนที่ไม่ร่วมรับ เช่น เจ้าของร้าน)</p>' + fields(payFields(), e, ro) + '</fieldset>' : '') +
         (data.canSensitive ? '<fieldset class="sens"><legend>4. ข้อมูลอ่อนไหว (เห็นเฉพาะ HR / เจ้าของร้าน)</legend><p class="sub" style="margin-top:0">เก็บตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล โดยได้รับความยินยอมจากพนักงาน (แบบ HR-F-03)</p>' +
           '<div id="sens">' + fields(F.sensitive, e.sensitive || {}, ro) + '</div></fieldset>' : '') +
