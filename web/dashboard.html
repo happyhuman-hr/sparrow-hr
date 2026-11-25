@@ -38,7 +38,7 @@ App.boot({ page: 'dashboard', role: 'manager', ready: function (me) {
         (App.can('hr') ? '<a class="btn sm" href="' + App.link('payroll.html') + '">💰 รายงานเงินเดือน</a>' : '') + '</div>' +
       '<h2>วันนี้</h2><div class="grid g4" style="margin-bottom:10px">' +
         stat(t.present + t.late, 'มาทำงานแล้ว', 'ok') + stat(t.late, 'มาสาย', t.late ? 'warn' : '') +
-        stat(t.notIn + t.absent, 'ยังไม่เข้างาน / ขาด', t.notIn + t.absent ? 'bad' : '') + stat(t.leave + t.off, 'ลา / วันหยุด', 'info') + '</div>' +
+        stat(t.notIn + t.absent, 'ยังไม่เข้างาน / ขาด', t.notIn + t.absent ? 'bad' : '') + stat(t.leave + t.off, 'ลา / วันหยุด' + (t.noShift ? ' · ยังไม่ตั้งกะ ' + t.noShift + ' คน' : ''), 'info') + '</div>' +
       '<div class="tbl-wrap" style="margin-bottom:18px"><table><thead><tr><th>พนักงาน</th><th>กะ</th><th>สถานะ</th><th>เข้า</th><th>ออก</th><th>หมายเหตุ</th></tr></thead><tbody>' +
         t.list.map(function (x) {
           return '<tr class="click" data-emp="' + x.empId + '"><td>' + App.esc(x.name) + '</td><td>' + (x.shift || '-') + '</td><td>' + App.statusBadge(x.status) + (x.lateMin ? ' <span class="sub">' + App.fmtMin(x.lateMin) + '</span>' : '') + '</td>' +
