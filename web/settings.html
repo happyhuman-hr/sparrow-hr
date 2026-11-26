@@ -68,6 +68,7 @@ App.boot({ page: 'settings', role: 'hr', ready: function (me) {
       '</div><div class="row"><button class="sm" id="here">📍 ใช้ตำแหน่งปัจจุบันของฉันเป็นจุดร้าน</button>' + (mapUrl ? '<a class="btn sm" target="_blank" rel="noopener" href="' + mapUrl + '">ดูบน Google Maps</a>' : '') + '</div></div>' +
 
       '<div class="card" id="s-time"><h2>เวลาทำงาน & OT</h2><div class="grid g2">' +
+        field('goLiveDate', 'วันที่เริ่มใช้ระบบจริง', 'ก่อนวันนี้ วันทำงานที่ไม่ได้ลงเวลาจะขึ้นว่า "ก่อนเริ่มใช้ระบบ" ไม่นับขาด และจ่ายเหมือนมาทำงาน · วันที่ลงเวลาไว้ (ช่วงทดสอบ) คิดตามจริง · เว้นว่าง = นับทุกวัน', 'date') +
         field('earliestCheckinMin', 'กดเข้างานได้ก่อนเริ่มกะไม่เกิน (นาที)', 'มาก่อนกะไม่นับเป็นเวลาทำงานหรือ OT', 'number') +
         field('hoursPerDay', 'ชั่วโมงทำงานปกติต่อวัน', 'ใช้คิดค่าจ้างต่อชั่วโมง: เงินเดือน ÷ 30 ÷ ชม. หรือ ค่าแรงรายวัน ÷ ชม.', 'number') +
         field('otRoundMin', 'คิด OT ละเอียดทีละ (นาที)', '1 = ทุกนาที (อยู่เกิน 28 นาที นับ 28 นาที) · 15 หรือ 30 = ปัดลง', 'number') +
@@ -146,10 +147,20 @@ App.boot({ page: 'settings', role: 'hr', ready: function (me) {
     App.$('#here').onclick = useHere;
     App.$('#save').onclick = save;
     App.$('#discard').onclick = function () { dirty = false; load(); };
+    // ลิงก์ที่มี #ส่วน (เช่น #s-news) → เลื่อนไปส่วนนั้นหลังหน้าสร้างเสร็จ
+    if (!jumped && location.hash) { jumped = true; var tgt = document.getElementById(location.hash.slice(1)); if (tgt) setTimeout(function () { tgt.scrollIntoView({ block: 'start' }); }, 50); }
   }
+  var jumped = false;
   // ---------------------------------------------------------------- ข่าวสาร
   var news = { items: [], categories: {}, departments: [], today: me.now.date };
-  function loadNews() { App.call('newsAdmin').then(function (d) { news = d; renderNews(); }).catch(function () {}); }
+  var composeOpened = false;
+  function loadNews() {
+    App.call('newsAdmin').then(function (d) {
+      news = d; renderNews();
+      // มาจากปุ่ม "✎ เขียนข่าว" ในหน้าข่าวสาร → เปิดหน้าเขียนข่าวทันที
+      if (!composeOpened && App.params.get('compose') === 'news') { composeOpened = true; editNews({ category: 'general', audience: 'all', pinned: 'no', startDate: news.today }); }
+    }).catch(function () {});
+  }
   function newsState(n) {
     if (n.startDate && n.startDate > news.today) return '<span class="badge b-late">ตั้งเวลาไว้ ' + App.dateTH(n.startDate) + '</span>';
     if (n.endDate && n.endDate < news.today) return '<span class="badge">หมดเวลาแสดงแล้ว</span>';

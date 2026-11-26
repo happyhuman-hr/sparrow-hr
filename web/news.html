@@ -48,7 +48,7 @@ App.boot({ page: 'news', ready: function (me) {
     var cats = {}; data.items.forEach(function (n) { cats[n.category] = 1; });
     var list = data.items.filter(function (n) { return cat === 'all' || n.category === cat; });
     wrap.innerHTML = '<div class="row" style="margin-bottom:12px"><div style="flex:1"><h1>ข่าวสาร</h1><div class="sub">ประกาศจาก The Sparrow</div></div>' +
-      (App.can('hr') ? '<a class="btn sm" href="' + App.link('settings.html') + '#s-news">✎ เขียนข่าว</a>' : '') + '</div>' +
+      (App.can('hr') ? '<a class="btn sm accent" href="' + App.link('settings.html') + (App.link('settings.html').indexOf('?') > 0 ? '&' : '?') + 'compose=news#s-news">✎ เขียนข่าว</a>' : '') + '</div>' +
       (Object.keys(cats).length > 1 ? '<div class="chips"><button data-cat="all" class="' + (cat === 'all' ? 'on' : '') + '">ทั้งหมด</button>' +
         Object.keys(cats).map(function (k) { return '<button data-cat="' + k + '" class="' + (cat === k ? 'on' : '') + '">' + App.esc(data.categories[k] || k) + '</button>'; }).join('') + '</div>' : '') +
       (list.length ? list.map(function (n) {

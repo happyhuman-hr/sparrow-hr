@@ -76,18 +76,23 @@ App.boot({ page: 'leave', ready: function (me) {
       App.$('#quota').innerHTML = q(quotaText(b), 'สิทธิ์ต่อปี', '') + q(b ? b.used : 0, 'ใช้ไปแล้ว', '') + q(b && b.pending ? b.pending : 0, 'รออนุมัติ', 'warn') + q(remainText(b), 'คงเหลือ', 'ok');
       if (App.$('#s').value !== App.$('#e').value && half !== 'none') { half = 'none'; App.$$('#half button').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-h') === 'none'); }); }
       clearTimeout(timer);
+      var send = App.$('#send'); send.disabled = true;   // รอตรวจเงื่อนไขก่อน
       timer = setTimeout(function () {
         App.call('leavePreview', payload()).then(function (r) {
+          // แจ้งล่วงหน้าไม่ทัน (ลากิจ / ลาพักร้อน ฯลฯ) → ไม่ให้กดส่ง
+          send.disabled = !!r.blocked || !r.days;
+          send.textContent = r.blocked ? 'ส่งใบลาไม่ได้ — แจ้งล่วงหน้าไม่ทัน' : 'ส่งใบลา';
           var b = r.balance, after = b && b.eligible && +b.quota ? b.remaining - (b.pending || 0) - r.days : null;
           App.$('#preview').innerHTML = '<p>ลาครั้งนี้ <b>' + r.days + ' วัน</b> <span class="sub">(นับเฉพาะวันที่มีกะทำงาน)</span>' +
             (after !== null ? '<br>ถ้าอนุมัติ จะเหลือสิทธิ์ <b' + (after < 0 ? ' style="color:var(--bad)"' : '') + '>' + after + ' วัน</b>' + (b.pending ? ' <span class="sub">(หักรายการที่รออนุมัติ ' + b.pending + ' วันแล้ว)</span>' : '') : '') + '</p>' +
+            (r.blocked ? '<div class="errbox">⛔ ' + App.esc(r.blocked) + '</div>' : '') +
             (r.warnings.length ? '<div class="warnbox">⚠️ ' + r.warnings.map(App.esc).join('<br>⚠️ ') + '<br><span class="sub">ส่งได้ แต่หัวหน้าจะเห็นคำเตือนนี้</span></div>' : '');
         }).catch(function () {});
       }, 250);
     }
     function payload() { return { type: App.$('#type').value, startDate: App.$('#s').value, endDate: App.$('#e').value, half: half, reason: App.$('#reason').value.trim(), hasFile: !!App.$('#file').files[0] }; }
     App.$('#send').onclick = function () {
-      var btn = this; btn.disabled = true; btn.textContent = 'กำลังส่ง…';
+      var btn = this; if (btn.disabled) return; btn.disabled = true; btn.textContent = 'กำลังส่ง…';
       App.fileToBase64(App.$('#file').files[0], 1600).then(function (f) {
         var p = payload(); p.file = f; return App.call('leaveCreate', p);
       }).then(function () {
