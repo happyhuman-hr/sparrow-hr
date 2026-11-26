@@ -92,14 +92,27 @@ App.boot({ page: 'my', ready: function (me) {
       }).join('') + '</div>' +
       '<div class="card"><h2>คำขอของฉัน</h2>' + (d.myLeaves.length + d.myOT.length ? d.myLeaves.map(function (l) {
           return '<div class="item"><div class="grow"><b>' + App.esc(LEAVE_NAME[l.type] || l.type) + '</b> ' + App.dateTH(l.startDate) + (l.endDate !== l.startDate ? ' – ' + App.dateTH(l.endDate) : '') +
-            (l.half && l.half !== 'none' ? ' (ครึ่ง' + (l.half === 'am' ? 'เช้า' : 'บ่าย') + ')' : '') + '<div class="sub">' + l.days + ' วัน' + (l.reason ? ' · ' + App.esc(l.reason) : '') + '</div></div>' + App.reqBadge(l.status) + '</div>';
+            (l.half && l.half !== 'none' ? ' (ครึ่ง' + (l.half === 'am' ? 'เช้า' : 'บ่าย') + ')' : '') + '<div class="sub">' + l.days + ' วัน' + (l.reason ? ' · ' + App.esc(l.reason) : '') + '</div></div>' + App.reqBadge(l.status) + cancelBtn('leave', l) + '</div>';
         }).join('') + d.myOT.map(function (o) {
-          return '<div class="item"><div class="grow"><b>' + (o.kind === 'holiday' ? 'ทำงานวันหยุด' : 'OT') + '</b> ' + App.dateTH(o.date) + '<div class="sub">' + App.fmtMin(Math.round((o.approvedHours || o.hours) * 60)) + (o.reason ? ' · ' + App.esc(o.reason) : '') + '</div></div>' + App.reqBadge(o.status) + '</div>';
+          return '<div class="item"><div class="grow"><b>' + (o.kind === 'holiday' ? 'ทำงานวันหยุด' : 'OT') + '</b> ' + App.dateTH(o.date) + '<div class="sub">' + App.fmtMin(Math.round((o.approvedHours || o.hours) * 60)) + (o.reason ? ' · ' + App.esc(o.reason) : '') + '</div></div>' + App.reqBadge(o.status) + cancelBtn('ot', o) + '</div>';
         }).join('') : '<div class="empty">ยังไม่มีคำขอ</div>') + '</div>';
 
     App.$('#prev').onclick = function () { month = App.addMonths(month, -1); load(); };
     App.$('#next').onclick = function () { month = App.addMonths(month, 1); load(); };
     App.$$('.cal .d[data-i]', wrap).forEach(function (el) { el.onclick = function () { detail(d.days[+el.getAttribute('data-i')]); }; });
+    App.$$('[data-cancel]', wrap).forEach(function (b) {
+      b.onclick = function () {
+        var kind = b.getAttribute('data-cancel'), id = b.getAttribute('data-id');
+        if (!confirm(kind === 'leave' ? 'ยกเลิกใบลานี้? หัวหน้าจะไม่เห็นคำขอนี้อีก' : 'ยกเลิกคำขอ OT นี้?')) return;
+        b.disabled = true;
+        App.call(kind === 'leave' ? 'leaveCancel' : 'otCancel', { id: id }).then(function () { App.toast('ยกเลิกแล้ว'); load(); }).catch(function () { b.disabled = false; });
+      };
+    });
+  }
+  /** ปุ่มยกเลิก: เฉพาะคำขอของตัวเองที่ยังรออนุมัติ */
+  function cancelBtn(kind, r) {
+    if (r.status !== 'pending' || (empId && String(empId) !== String(me.user.id))) return '';
+    return ' <button class="sm" data-cancel="' + kind + '" data-id="' + App.esc(r.id) + '" style="margin-left:6px">ยกเลิกคำขอ</button>';
   }
 
   function stat(n, l, cls) { return '<div class="stat ' + (cls || '') + '"><div class="n">' + n + '</div><div class="l">' + App.esc(l) + '</div></div>'; }
