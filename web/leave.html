@@ -68,6 +68,15 @@ App.boot({ page: 'leave', ready: function (me) {
     App.$$('[data-pick]', body).forEach(function (tr) { tr.onclick = function () { App.$('#type').value = tr.getAttribute('data-pick'); preview(); App.$('#type').scrollIntoView({ behavior: 'smooth', block: 'center' }); }; });
     ['type', 's', 'e', 'file'].forEach(function (id) { App.$('#' + id).onchange = function () { if (id === 's' && App.$('#e').value < App.$('#s').value) App.$('#e').value = App.$('#s').value; preview(); }; });
     var timer;
+    /** ตรวจแจ้งล่วงหน้าในหน้าเว็บเอง (ไม่รอเซิร์ฟเวอร์) — ลาที่มีกำหนดแจ้งล่วงหน้า เช่น ลากิจ / พักร้อน 7 วัน */
+    function noticeBlock() {
+      var p = policies.filter(function (x) { return x.type === App.$('#type').value; })[0], s = App.$('#s').value;
+      if (!p || !+p.noticeDays || p.type === 'sick' || !s) return '';
+      var left = Math.round((Date.parse(s) - Date.parse(today)) / 86400000);
+      if (left >= +p.noticeDays) return '';
+      var ok = App.addDays(today, +p.noticeDays);
+      return p.name + 'ต้องส่งใบลาล่วงหน้าอย่างน้อย ' + p.noticeDays + ' วัน (วันที่เลือกเหลืออีก ' + Math.max(0, left) + ' วัน) — ลาได้ตั้งแต่วันที่ ' + App.dateTH(ok) + ' เป็นต้นไป · กรณีจำเป็นเร่งด่วน ติดต่อเจ้าของร้านหรือ HR โดยตรง';
+    }
     function preview() {
       var p = policies.filter(function (x) { return x.type === App.$('#type').value; })[0];
       App.$('#pnote').textContent = p ? [p.paid, p.note].filter(Boolean).join(' · ') : '';
@@ -77,9 +86,12 @@ App.boot({ page: 'leave', ready: function (me) {
       if (App.$('#s').value !== App.$('#e').value && half !== 'none') { half = 'none'; App.$$('#half button').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-h') === 'none'); }); }
       clearTimeout(timer);
       var send = App.$('#send'); send.disabled = true;   // รอตรวจเงื่อนไขก่อน
+      var local = noticeBlock();
+      if (local) { send.textContent = 'ส่งใบลาไม่ได้ — แจ้งล่วงหน้าไม่ทัน'; App.$('#preview').innerHTML = '<div class="errbox">⛔ ' + App.esc(local) + '</div>'; }
       timer = setTimeout(function () {
         App.call('leavePreview', payload()).then(function (r) {
           // แจ้งล่วงหน้าไม่ทัน (ลากิจ / ลาพักร้อน ฯลฯ) → ไม่ให้กดส่ง
+          r.blocked = r.blocked || noticeBlock();   // ตรวจซ้ำตอนได้คำตอบ (กันกรณีเซิร์ฟเวอร์ยังเป็นรุ่นเก่า)
           send.disabled = !!r.blocked || !r.days;
           send.textContent = r.blocked ? 'ส่งใบลาไม่ได้ — แจ้งล่วงหน้าไม่ทัน' : 'ส่งใบลา';
           var b = r.balance, after = b && b.eligible && +b.quota ? b.remaining - (b.pending || 0) - r.days : null;
@@ -92,7 +104,9 @@ App.boot({ page: 'leave', ready: function (me) {
     }
     function payload() { return { type: App.$('#type').value, startDate: App.$('#s').value, endDate: App.$('#e').value, half: half, reason: App.$('#reason').value.trim(), hasFile: !!App.$('#file').files[0] }; }
     App.$('#send').onclick = function () {
-      var btn = this; if (btn.disabled) return; btn.disabled = true; btn.textContent = 'กำลังส่ง…';
+      var btn = this; if (btn.disabled) return;
+      var blk = noticeBlock(); if (blk) { App.toast(blk, true); btn.disabled = true; return; }
+      btn.disabled = true; btn.textContent = 'กำลังส่ง…';
       App.fileToBase64(App.$('#file').files[0], 1600).then(function (f) {
         var p = payload(); p.file = f; return App.call('leaveCreate', p);
       }).then(function () {
