@@ -41,7 +41,7 @@
   var STATUS = {
     present: ['ตรงเวลา', 'present'], late: ['มาสาย', 'late'], absent: ['ขาดงาน', 'absent'], incomplete: ['ไม่ได้ออกงาน', 'incomplete'],
     leave: ['ลา', 'leave'], off: ['วันหยุด', 'off'], holiday_work: ['ทำงานวันหยุด', 'holiday_work'], holiday_working: ['ทำงานวันหยุด', 'holiday_work'],
-    working: ['กำลังทำงาน', 'working'], not_in: ['ยังไม่เข้างาน', 'not_in'], upcoming: ['', 'upcoming'], unscheduled: ['ไม่มีกะ', 'off'], unscheduled_work: ['มาทำงาน (ไม่มีกะ)', 'late']
+    working: ['กำลังทำงาน', 'working'], not_in: ['ยังไม่เข้างาน', 'not_in'], upcoming: ['', 'upcoming'], unscheduled: ['ไม่มีกะ', 'off'], pre_golive: ['ก่อนเริ่มใช้ระบบ', 'off'], unscheduled_work: ['มาทำงาน (ไม่มีกะ)', 'late']
   };
   function statusBadge(st) { var s = STATUS[st] || [st, 'off']; return s[0] ? '<span class="badge b-' + s[1] + '">' + esc(s[0]) + '</span>' : ''; }
   var REQ_STATUS = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ', cancelled: 'ยกเลิก' };
@@ -204,10 +204,10 @@
   var notifData = null;
   function seenIds() { try { return JSON.parse(localStorage.getItem('hris-seen') || '[]'); } catch (e) { return []; } }
   function setSeen(ids) { try { localStorage.setItem('hris-seen', JSON.stringify(ids.slice(-200))); } catch (e) { /* ignore */ } }
-  function pollNotif() {
-    api('notifications').then(function (res) {
-      if (!res.ok) return;
-      var d = res.data, seen = seenIds(), all = d.items.concat(d.results).concat(d.news || []);
+  /** แสดงแจ้งเตือน (จุดแดงบนกระดิ่ง / เมนูอนุมัติ / toast) จากข้อมูล d — ใช้ทั้งข้อมูลที่จำไว้และข้อมูลใหม่จากเซิร์ฟเวอร์ */
+  var NOTIF_KEY = 'hris-notif';
+  function showNotif(d, quiet) {
+      var seen = seenIds(), all = d.items.concat(d.results).concat(d.news || []);
       var fresh = all.filter(function (x) { return seen.indexOf(x.id + x.kind + (x.status || '')) < 0; });
       notifData = d; notifData.fresh = fresh.map(function (x) { return x.id + x.kind + (x.status || ''); });
       var bell = $('#bell'); if (!bell) return;
@@ -216,10 +216,19 @@
       // badge จำนวนที่รออนุมัติบนเมนู "อนุมัติ"
       var ap = document.querySelector('.nav a[href^="approve.html"]');
       if (ap) { var od = $('.dot', ap); if (od) od.remove(); if (d.pending) ap.appendChild(h('<span class="dot">' + d.pending + '</span>')); }
-      if (fresh.length && !sessionStorage.getItem('hris-toasted-' + notifData.fresh.join())) {
+      if (!quiet && fresh.length && !sessionStorage.getItem('hris-toasted-' + notifData.fresh.join())) {
         sessionStorage.setItem('hris-toasted-' + notifData.fresh.join(), '1');
         var f = fresh[0]; toast((fresh.length > 1 ? 'มีแจ้งเตือนใหม่ ' + fresh.length + ' รายการ · ' : '🔔 ') + f.title);
       }
+      var open = $('#notif'); if (open && !quiet) { open.remove(); toggleNotif(); }   // แผงเปิดค้างอยู่ → อัปเดตเนื้อหา
+  }
+  function pollNotif() {
+    // แสดงชุดล่าสุดที่จำไว้ทันที (ไม่ต้องรอเซิร์ฟเวอร์ 2–5 วินาที) แล้วค่อยอัปเดตเมื่อได้ข้อมูลใหม่
+    if (!notifData && !DEMO) { try { var c = JSON.parse(sessionStorage.getItem(NOTIF_KEY) || 'null'); if (c && c.sub === lineSub()) showNotif(c.d, true); } catch (e) { /* ignore */ } }
+    api('notifications').then(function (res) {
+      if (!res.ok) return;
+      if (!DEMO) { try { sessionStorage.setItem(NOTIF_KEY, JSON.stringify({ sub: lineSub(), d: res.data })); } catch (e) { /* ignore */ } }
+      showNotif(res.data);
     });
   }
   function toggleNotif() {
