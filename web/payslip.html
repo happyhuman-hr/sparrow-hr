@@ -28,16 +28,20 @@
 /* สลิปเงินเดือนของฉัน — เห็นเฉพาะของตัวเอง และเฉพาะเดือนที่เจ้าของร้าน / HR กดส่งแล้ว */
 App.boot({ page: 'payslip', ready: function (me) {
   var main = App.$('#main'), wrap = App.h('<div class="wrap" style="max-width:820px"></div>'); main.appendChild(wrap);
-  var list = [], current = App.params.get('month');
+  // สลิปแต่ละใบ = เดือน + ชนิด ('' เงินเดือน จ่าย 25 · 'sc' Service charge & ทิป จ่าย 10 ของเดือนถัดไป)
+  var list = [], current = App.params.get('month') ? App.params.get('month') + '|' + (App.params.get('kind') || '') : null;
+  var key = function (x) { return x.month + '|' + (x.kind || ''); };
+  var cur = function () { var p = current.split('|'); return { month: p[0], kind: p[1] || '' }; };
 
   function load() {
     App.loading(wrap);
-    App.call('mySlips').then(function (l) { list = l; if (!current && l.length) current = l[0].month; render(); }).catch(function () {});
+    App.call('mySlips').then(function (l) { list = l; if ((!current || !l.some(function (x) { return key(x) === current; })) && l.length) current = key(l[0]); render(); }).catch(function () {});
   }
   function render() {
     wrap.innerHTML = '<div class="row" style="margin-bottom:10px"><div style="flex:1"><h1>สลิปเงินเดือน</h1><div class="sub">เห็นเฉพาะของคุณ · ข้อมูลเงินเดือนเป็นความลับตามข้อบังคับฯ ห้ามเปิดเผยให้ผู้อื่น</div></div></div>' +
       (list.length ? '<div class="months">' + list.map(function (x) {
-        return '<button data-m="' + x.month + '" class="' + (x.month === current ? 'on' : '') + '"><span class="m">' + App.monthTH(x.month) + (x.seen ? '' : '<span class="new">ใหม่</span>') + '</span>' +
+        return '<button data-m="' + key(x) + '" class="' + (key(x) === current ? 'on' : '') + '"><span class="m">' + (x.kind === 'sc' ? 'SC & ทิป ' : 'เงินเดือน ') + App.monthTH(x.month) + (x.seen ? '' : '<span class="new">ใหม่</span>') + '</span>' +
+          '<span class="pd" style="display:block;font-size:11.5px;color:var(--ink-3)">จ่าย ' + App.dateTH(x.payDate) + '</span>' +
           '<span class="v">สุทธิ ฿' + (+x.net || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (x.ackAt ? ' · ✓' : '') + '</span></button>';
       }).join('') + '</div><div class="row" style="margin-bottom:10px"><span class="sub" id="pubAt"></span><div class="spacer"></div><span id="ackBox"></span><button class="sm" id="print">🖨 พิมพ์ / บันทึก PDF</button></div>' +
         '<iframe class="slipframe" id="slip" title="สลิปเงินเดือน"></iframe>'
@@ -48,13 +52,14 @@ App.boot({ page: 'payslip', ready: function (me) {
   }
   function show() {
     var f = App.$('#slip');
-    App.call('mySlip', { month: current }).then(function (d) {
-      f.srcdoc = App.slipHtml(d.row, d.month, d.shopName, { note: 'ส่งเมื่อ ' + String(d.publishedAt).slice(0, 16) });
+    App.call('mySlip', cur()).then(function (d) {
+      var note = 'ส่งเมื่อ ' + String(d.publishedAt).slice(0, 16);
+      f.srcdoc = d.kind === 'sc' ? App.scSlipHtml(d.row, d.month, d.shopName, d.payDate, { note: note }) : App.slipHtml(d.row, d.month, d.shopName, { note: note, payDate: d.payDate });
       f.onload = function () { try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 20) + 'px'; } catch (e) { /* ignore */ } };
       App.$('#pubAt').textContent = 'ส่งเมื่อ ' + String(d.publishedAt).slice(0, 16);
       ackBox(d.ackAt);
       App.$('#print').onclick = function () { f.contentWindow.focus(); f.contentWindow.print(); };
-      var it = list.filter(function (x) { return x.month === current; })[0]; if (it && !it.seen) { it.seen = true; var b = App.$('[data-m="' + current + '"] .new'); if (b) b.remove(); }
+      var it = list.filter(function (x) { return key(x) === current; })[0]; if (it && !it.seen) { it.seen = true; var b = App.$('[data-m="' + current + '"] .new'); if (b) b.remove(); }
     }).catch(function () {});
   }
   function ackBox(at) {
@@ -62,11 +67,12 @@ App.boot({ page: 'payslip', ready: function (me) {
     if (at) { box.innerHTML = '<span class="badge b-present">✓ รับทราบแล้ว ' + App.esc(String(at).slice(0, 16)) + '</span>'; return; }
     box.innerHTML = '<button class="sm accent" id="ack">✓ รับทราบสลิป</button>';
     App.$('#ack').onclick = function () {
-      if (!confirm('ยืนยันว่าได้ตรวจสอบและรับทราบสลิปเงินเดือน ' + App.monthTH(current) + ' แล้ว?')) return;
+      var c = cur();
+      if (!confirm('ยืนยันว่าได้ตรวจสอบและรับทราบสลิป' + (c.kind === 'sc' ? ' Service charge & ทิป ' : 'เงินเดือน ') + App.monthTH(c.month) + ' แล้ว?')) return;
       this.disabled = true;
-      App.call('slipAck', { month: current }).then(function (r) {
+      App.call('slipAck', c).then(function (r) {
         ackBox(r.ackAt); App.toast('รับทราบสลิปแล้ว');
-        var it = list.filter(function (x) { return x.month === current; })[0]; if (it) it.ackAt = r.ackAt;
+        var it = list.filter(function (x) { return key(x) === current; })[0]; if (it) it.ackAt = r.ackAt;
         var mb = App.$('[data-m="' + current + '"] .v'); if (mb && mb.textContent.indexOf('✓') < 0) mb.textContent += ' · ✓';
       }).catch(function () {});
     };

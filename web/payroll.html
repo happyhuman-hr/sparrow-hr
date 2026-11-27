@@ -74,9 +74,8 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
   function render() {
     var t = sum(data.rows), s = data.settings;
     var cols = [
-      ['ค่าจ้าง', 'base', 'in'], ['ค่าตำแหน่ง', 'positionAllowance', 'in'], ['ค่าโทร/เดินทาง', 'fixedAllowance', 'in'], ['OT', 'otPay', 'in'], ['เบี้ยขยัน', 'attBonus', 'in'], ['ค่าอาหาร', 'meal', 'in'],
-      ['Service charge', 'serviceCharge', 'in'], ['ทิป', 'tips', 'in']
-    ];
+      ['ค่าจ้าง', 'base', 'in'], ['ค่าตำแหน่ง', 'positionAllowance', 'in'], ['ค่าโทร/เดินทาง', 'fixedAllowance', 'in'], ['OT', 'otPay', 'in'], ['เบี้ยขยัน', 'attBonus', 'in'], ['ค่าอาหาร', 'meal', 'in']
+    ];   // Service charge / ทิป จ่ายแยกรอบวันที่ 10 ของเดือนถัดไป — ดูกล่อง Service charge & ทิป
     // แสดงเฉพาะรายการที่ร้านเปิดใช้ (หน้าตั้งค่า → เงินเดือน)
     var on = s.items || {}, NEED = { positionAllowance: 'usePositionAllowance', fixedAllowance: 'useFixedAllowance', attBonus: 'useAttBonus', otherIncome: 'useOtherIncome',
       advance: 'useAdvance', loan: 'useLoan', pvd: 'usePvd', otPay: 'useOT', meal: 'useMeal', serviceCharge: 'useServiceCharge', tips: 'useTips', bonus: 'useBonus',
@@ -86,16 +85,16 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
     var fixOut = ['absenceDeduct', 'lateDeduct', 'sso', 'tax'].filter(use);
     var inEdit = IN_EDIT.filter(function (a) { return use(a[0]); }), outEdit = OUT_EDIT.filter(function (a) { return use(a[0]); }), showPvd = use('pvd');
     wrap.innerHTML =
-      '<div class="pay-head no-print"><div class="pay-title"><h1>รายงานเงินเดือน</h1><div class="sub">' + App.esc(data.shopName) + ' · จ่ายทุกวันที่ 25 ของเดือน</div></div><div class="pay-tools">' +
+      '<div class="pay-head no-print"><div class="pay-title"><h1>รายงานเงินเดือน</h1><div class="sub">' + App.esc(data.shopName) + ' · เงินเดือนจ่ายวันที่ 25 · Service charge & ทิป จ่ายวันที่ ' + (+data.scPayDate.slice(8)) + ' ของเดือนถัดไป</div></div><div class="pay-tools">' +
         '<a class="btn sm" href="' + App.link('tax50.html') + (App.link('tax50.html').indexOf('?') > 0 ? '&' : '?') + 'year=' + data.month.slice(0, 4) + '">📄 50 ทวิ</a>' +
         '<button class="sm" id="pnd1">🧾 ภ.ง.ด.1</button><button class="sm" id="pnd1a">🗂 ภ.ง.ด.1ก (รายปี)</button><button class="sm" id="csv">⬇ ส่งออก CSV</button><button class="sm" id="print">🖨 พิมพ์รายงาน</button>' +
-        '<button class="sm accent" id="pub">📤 ' + (data.published ? 'ส่งสลิปอีกครั้ง' : 'ส่งสลิปให้พนักงาน') + '</button></div></div>' +
-      (data.published ? '<div class="no-print" style="background:var(--ok-soft);color:var(--ok);border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13.5px">✓ ส่งสลิปเดือนนี้แล้วเมื่อ ' +
+        '<button class="sm accent" id="pub">📤 ' + (data.published ? 'ส่งสลิปเงินเดือนอีกครั้ง' : 'ส่งสลิปเงินเดือน') + '</button></div></div>' +
+      (data.published ? '<div class="no-print" style="background:var(--ok-soft);color:var(--ok);border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13.5px">✓ ส่งสลิปเงินเดือน (จ่าย 25) แล้วเมื่อ ' +
         App.esc(data.published.at.slice(0, 16)) + (data.published.by ? ' โดย ' + App.esc(data.published.by) : '') + ' · ' + data.published.count + ' คน · เปิดดูแล้ว ' + data.published.seen + ' · รับทราบแล้ว ' + data.published.acked + ' คน' +
         ' · <a href="#" id="unpub" style="color:var(--bad)">ยกเลิกการส่ง</a></div>' : '<div class="no-print sub" style="margin-bottom:10px">ยังไม่ได้ส่งสลิปเดือนนี้ให้พนักงาน — ตรวจตัวเลขแล้วกด "ส่งสลิปให้พนักงาน"</div>') +
       '<div class="row" style="margin-bottom:10px"><button class="sm no-print" id="pm">‹</button><h2 class="plain" style="margin:0;flex:1;text-align:center">' + App.monthTH(data.month) + '</h2><button class="sm no-print" id="nm">›</button></div>' +
       (data.partial ? '<div class="warnbox">เดือนนี้ยังไม่จบ — ข้อมูลเวลาทำงานถึงวันที่ ' + App.dateTH(data.asOf) + ' · พนักงานรายวันจะได้ยอดเพิ่มตามวันที่มาทำงานจนสิ้นเดือน</div>' : '') +
-      '<div class="grid g4" style="margin-bottom:12px">' + stat(t.count, 'พนักงาน') + stat('฿' + App.num(t.net), 'ยอดโอนเงินเดือน', 'ok') +
+      '<div class="grid g4" style="margin-bottom:12px">' + stat(t.count, 'พนักงาน') + stat('฿' + App.num(t.net), 'ยอดโอนเงินเดือน (วันที่ 25)', 'ok') +
         stat('฿' + App.num(t.sso * 2), 'นำส่งประกันสังคม (2 ฝ่าย)', '') + stat('฿' + App.num(t.tax), 'นำส่งภาษี ภ.ง.ด.1', 'info') + '</div>' +
 
       (use('serviceCharge') || use('tips') ? poolBox() : '') +
@@ -146,6 +145,8 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
         .catch(function () { btn.disabled = false; });
     };
     if (App.$('#unpub')) App.$('#unpub').onclick = function (e) { e.preventDefault(); unpublish(); };
+    if (App.$('#pubSc')) App.$('#pubSc').onclick = publishSc;
+    if (App.$('#unpubSc')) App.$('#unpubSc').onclick = function (e) { e.preventDefault(); if (!confirm('ยกเลิกการส่งสลิป Service charge & ทิป เดือนนี้?')) return; App.call('payrollUnpublishSc', { month: data.month }).then(function () { App.toast('ยกเลิกการส่งแล้ว'); load(); }).catch(function () {}); };
     App.$$('tr[data-i] input', wrap).forEach(function (el) { el.addEventListener('change', function () { saveRow(el.closest('tr')); }); });
     App.$$('[data-slip]', wrap).forEach(function (b) { b.onclick = function () { slip(data.rows[+b.getAttribute('data-slip')]); }; });
   }
@@ -153,8 +154,13 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
   function poolBox() {
     var p = data.pool || {}, people = data.rows.filter(function (r) { return r.scWeight > 0; }).length;
     var m2v = function (v) { return +v ? v : ''; };
-    return '<div class="card no-print"><h2>Service charge & ทิป เดือนนี้</h2>' +
-      '<p class="sub" style="margin-top:-4px">ใส่ยอดที่เก็บได้จริงของเดือน ระบบแบ่งให้พนักงานอัตโนมัติ · ไม่นับเป็นค่าจ้าง (ไม่นับฐานประกันสังคม) แต่เป็นเงินได้ที่ต้องเสียภาษี · <b>แบ่งตามจำนวนวันที่มาทำงานจริง</b> ใครมามากได้มาก เช่น มา 26 วันได้มากกว่าคนที่มา 13 วันสองเท่า · คนที่ไม่ร่วมรับ (เช่น เจ้าของร้าน) ตั้งในแฟ้มพนักงาน</p>' +
+    var sp = data.scPublished, pay = App.dateTH(data.scPayDate);
+    return '<div class="card no-print"><div class="row" style="align-items:flex-start;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2 style="margin-bottom:2px">Service charge & ทิป ' + App.monthTH(data.month) + '</h2>' +
+        '<div class="sub">โอนแยกรอบ <b>วันที่ ' + pay + '</b> พร้อมสลิปของตัวเอง</div></div>' +
+        '<button class="sm accent" id="pubSc"' + (data.pool && !data.partial ? '' : ' disabled title="ใส่ยอดและรอให้สิ้นเดือนก่อน"') + '>📤 ' + (sp ? 'ส่งสลิป SC & ทิป อีกครั้ง' : 'ส่งสลิป SC & ทิป') + '</button></div>' +
+      (sp ? '<div style="background:var(--ok-soft);color:var(--ok);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:13.5px">✓ ส่งสลิป SC & ทิป แล้วเมื่อ ' + App.esc(sp.at.slice(0, 16)) + ' · ' + sp.count + ' คน · เปิดดูแล้ว ' + sp.seen + ' · รับทราบแล้ว ' + sp.acked +
+        ' · <a href="#" id="unpubSc" style="color:var(--bad)">ยกเลิกการส่ง</a></div>' : '') +
+      '<p class="sub" style="margin-top:6px">ใส่ยอดที่เก็บได้จริงของเดือน ระบบแบ่งให้พนักงานอัตโนมัติ · ไม่นับเป็นค่าจ้าง (ไม่นับฐานประกันสังคม) แต่เป็นเงินได้ที่ต้องเสียภาษี — หักภาษีตอนจ่ายวันที่ ' + pay + ' และรวมใน ภ.ง.ด.1 เดือน ' + App.monthTH(data.scPayDate.slice(0, 7)) + ' · <b>แบ่งตามจำนวนวันที่มาทำงานจริง</b> ใครมามากได้มาก · คนที่ไม่ร่วมรับ (เช่น เจ้าของร้าน) ตั้งในแฟ้มพนักงาน</p>' +
       '<div class="grid g3" style="align-items:end"><div class="field"><label>ยอด Service charge (บาท)</label><input id="poolSc" inputmode="decimal" value="' + m2v(p.serviceCharge) + '" placeholder="0"></div>' +
       '<div class="field"><label>ยอดทิปส่วนกลาง (บาท)</label><input id="poolTips" inputmode="decimal" value="' + m2v(p.tips) + '" placeholder="0"></div>' +
       '<div class="field"><button class="accent" id="poolSave" style="width:100%">บันทึกและแบ่ง</button></div></div>' +
@@ -169,18 +175,22 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
   }
   /** ตารางส่วนแบ่งรายคน: วันที่มาทำงาน → Service charge / ทิป ที่ได้ */
   function poolShares() {
-    var rows = data.rows, tot = { d: 0, sc: 0, tp: 0 };
-    if (!rows.some(function (r) { return r.serviceCharge || r.tips; })) return '';
+    var rows = data.rows, tot = { d: 0, sc: 0, tp: 0, tx: 0, nt: 0 }, S = function (r) { return r.sc || {}; };
+    if (!rows.some(function (r) { return S(r).income; })) return '';
     var dayFmt = function (d) { return (+d || 0).toLocaleString('th-TH', { maximumFractionDigits: 1 }); };
     var body = rows.slice().sort(function (a, b) { return (b.scWeight > 0) - (a.scWeight > 0) || b.workedDays - a.workedDays; }).map(function (r) {
       var gets = r.scWeight > 0;
-      if (gets) { tot.d += +r.workedDays || 0; tot.sc += +r.serviceCharge || 0; tot.tp += +r.tips || 0; }
+      var x = S(r);
+      if (gets) { tot.d += +r.workedDays || 0; tot.sc += +x.serviceCharge || 0; tot.tp += +x.tips || 0; tot.tx += +x.tax || 0; tot.nt += +x.net || 0; }
       var why = gets ? '' : ' <span class="badge">' + (r.workedDays > 0 ? 'ไม่ได้รับ' : 'ไม่มีวันทำงาน') + '</span>';
-      return '<tr' + (gets ? '' : ' style="color:var(--ink-3)"') + '><td>' + shortName(r.name) + why + '</td><td class="num">' + dayFmt(r.workedDays) + '</td>' +
-        '<td class="num">' + (gets ? m2(r.serviceCharge) : '-') + '</td><td class="num">' + (gets ? m2(r.tips) : '-') + '</td><td class="num"><b>' + (gets ? m2((+r.serviceCharge || 0) + (+r.tips || 0)) : '-') + '</b></td></tr>';
+      var seen = r.scSlip ? (r.scSlip.ackAt ? ' <span class="badge b-present">✓ รับทราบ</span>' : r.scSlip.seenAt ? ' <span class="badge b-late">เปิดดูแล้ว</span>' : '') : '';
+      return '<tr' + (gets ? '' : ' style="color:var(--ink-3)"') + '><td>' + shortName(r.name) + why + seen + '</td><td class="num">' + dayFmt(r.workedDays) + '</td>' +
+        '<td class="num">' + (gets ? m2(x.serviceCharge) : '-') + '</td><td class="num">' + (gets ? m2(x.tips) : '-') + '</td><td class="num">' + (gets ? m2(x.income) : '-') + '</td>' +
+        '<td class="num">' + (gets ? dash(x.tax, 1) : '-') + '</td><td class="num"><b>' + (gets ? m2(x.net) : '-') + '</b></td></tr>';
     }).join('');
-    return '<h3 style="margin:14px 0 6px;font-size:15px">ส่วนแบ่งรายคน</h3><div class="tbl-wrap"><table class="shares"><thead><tr><th>พนักงาน</th><th class="num">วันที่มา</th><th class="num">Service</th><th class="num">ทิป</th><th class="num">รวม</th></tr></thead><tbody>' + body +
-      '</tbody><tfoot><tr style="font-weight:700;background:#f6ebe6"><td>รวม</td><td class="num">' + dayFmt(tot.d) + '</td><td class="num">' + m2(tot.sc) + '</td><td class="num">' + m2(tot.tp) + '</td><td class="num">' + m2(tot.sc + tot.tp) + '</td></tr></tfoot></table></div>' +
+    return '<h3 style="margin:14px 0 6px;font-size:15px">ส่วนแบ่งรายคน · โอนวันที่ ' + App.dateTH(data.scPayDate) + '</h3><div class="tbl-wrap"><table class="shares"><thead><tr><th>พนักงาน</th><th class="num">วันที่มา</th><th class="num">Service</th><th class="num">ทิป</th><th class="num">รวม</th><th class="num">ภาษี</th><th class="num">สุทธิ (โอน)</th></tr></thead><tbody>' + body +
+      '</tbody><tfoot><tr style="font-weight:700;background:#f6ebe6"><td>รวม</td><td class="num">' + dayFmt(tot.d) + '</td><td class="num">' + m2(tot.sc) + '</td><td class="num">' + m2(tot.tp) + '</td><td class="num">' + m2(tot.sc + tot.tp) + '</td><td class="num">' + m2(tot.tx) + '</td><td class="num">' + m2(tot.nt) + '</td></tr></tfoot></table></div>' +
+      '<p class="sub" style="margin-top:6px">ภาษี = ภาษีทั้งปีที่เพิ่มขึ้นเมื่อรวม SC/ทิป กับเงินได้ประจำ ÷ 12 (ภาษี 2 รอบรวมกันเท่ากับคิดรวมใบเดียว) · ไม่หักประกันสังคม</p>' +
       '<p class="sub" style="margin-top:6px">ส่วนแบ่ง = ยอดรวม × (วันที่คนนั้นมาทำงาน ÷ วันทำงานรวมของทุกคน) · วันลา/ขาดไม่นับ · วันทำงานครึ่งวันนับตามสัดส่วนชั่วโมง</p>';
   }
   function inp(r, k) { return '<input data-k="' + k + '" inputmode="decimal" value="' + (r[k] ? r[k] : '') + '" placeholder="0">'; }
@@ -190,6 +200,7 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
   /** สรุปยอดโอนและยอดนำส่ง + แยกตามแผนก/ประเภท (แบบชีต "สรุปนำส่ง") */
   function remittance(t) {
     var next = App.addMonths(data.month, 1), nm = App.monthTH(next);
+    var sc = data.rows.reduce(function (a, r) { var x = r.sc || {}; a.income += +x.income || 0; a.tax += +x.tax || 0; a.net += +x.net || 0; return a; }, { income: 0, tax: 0, net: 0 });
     var by = function (key, label) {
       var g = {}; data.rows.forEach(function (r) { var k = label(r); (g[k] = g[k] || []).push(r); });
       return Object.keys(g).sort().map(function (k) { var x = sum(g[k]); return '<tr><td>' + App.esc(k) + '</td><td class="num">' + x.count + '</td><td class="num">' + m2(x.income) + '</td><td class="num">' + m2(x.sso) + '</td><td class="num">' + m2(x.tax) + '</td><td>' + m2(x.net) + '</td></tr>'; }).join('');
@@ -202,7 +213,9 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
         '<tr><td><b>รวมนำส่งประกันสังคม</b> · ภายในวันที่ 15 ' + nm + '</td><td><b>' + m2(t.sso * 2) + '</b></td></tr>' +
         '<tr><td><b>ภาษีหัก ณ ที่จ่าย ภ.ง.ด.1</b> · ภายในวันที่ 7 ' + nm + ' (ยื่นออนไลน์ถึงวันที่ 15)</td><td><b>' + m2(t.tax) + '</b></td></tr>' +
         (t.pvd ? '<tr><td>กองทุนสำรองเลี้ยงชีพ ส่วนพนักงาน (นำส่งตามข้อตกลงกองทุน)</td><td>' + m2(t.pvd) + '</td></tr>' : '') +
-        '<tr><td>ต้นทุนค่าแรงรวมของร้าน (รายได้ทั้งหมด − หักขาด/สาย + ประกันสังคมส่วนร้าน)</td><td>' + m2(t.income - t.absenceDeduct - t.lateDeduct + t.sso) + '</td></tr>' +
+        (sc.income ? '<tr><td><b>ยอดโอน Service charge & ทิป</b> · วันที่ ' + App.dateTH(data.scPayDate) + '</td><td><b>' + m2(sc.net) + '</b></td></tr>' +
+          '<tr><td>ภาษีหัก ณ ที่จ่ายจาก SC & ทิป · รวมใน ภ.ง.ด.1 เดือน ' + App.monthTH(data.scPayDate.slice(0, 7)) + '</td><td>' + m2(sc.tax) + '</td></tr>' : '') +
+        '<tr><td>ต้นทุนค่าแรงรวมของร้าน (รายได้ทั้งหมด − หักขาด/สาย + ประกันสังคมส่วนร้าน' + (sc.income ? ' + SC & ทิป' : '') + ')</td><td>' + m2(t.income - t.absenceDeduct - t.lateDeduct + t.sso + sc.income) + '</td></tr>' +
       '</tbody></table></div>' +
       '<div class="card"><h2>แยกตามแผนก / ประเภท</h2><div class="tbl-wrap"><table><thead><tr><th>กลุ่ม</th><th class="num">คน</th><th class="num">รายได้</th><th class="num">ปกส.</th><th class="num">ภาษี</th><th class="num">สุทธิ</th></tr></thead><tbody>' +
         by('d', function (r) { return r.department || 'ไม่ระบุแผนก'; }) + '<tr><td colspan="6" style="background:#f6ebe6"></td></tr>' + by('t', function (r) { return r.payType === 'daily' ? 'รายวัน' : 'รายเดือน'; }) +
@@ -222,21 +235,22 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
   function exportCsv() {
     var head = ['เดือน', 'รหัส', 'ชื่อ-สกุล', 'เลขบัตรประชาชน', 'ธนาคาร', 'เลขที่บัญชี', 'ตำแหน่ง', 'แผนก', 'ประเภท', 'อัตราค่าจ้าง', 'วันในงาน', 'วันทำงานตามกะ', 'มาทำงาน (วัน)', 'ขาดงาน (วัน)',
       'ลารับค่าจ้าง (วัน)', 'ลาไม่รับค่าจ้าง (วัน)', 'วันหยุดตามประเพณีที่จ่าย (วัน)', 'สาย (นาที)', 'กลับก่อน (นาที)', 'OT 1.5x (นาที)', 'ทำงานวันหยุด (นาที)', 'OT วันหยุด 3x (นาที)',
-      'ค่าจ้าง', 'ค่าตำแหน่ง', 'ค่าโทร/เดินทางประจำ', 'ค่า OT', 'เบี้ยขยัน', 'ค่าอาหาร', 'Service charge', 'ทิป', 'โบนัส/คอมมิชชั่น', 'รายได้อื่น', 'รวมรายได้',
+      'ค่าจ้าง', 'ค่าตำแหน่ง', 'ค่าโทร/เดินทางประจำ', 'ค่า OT', 'เบี้ยขยัน', 'ค่าอาหาร', 'โบนัส/คอมมิชชั่น', 'รายได้อื่น', 'รวมรายได้',
       'หักขาด/ลาไม่รับเงิน', 'หักสาย/กลับก่อน', 'ฐานค่าจ้างประกันสังคม', 'ประกันสังคม (พนักงาน)', 'ภาษีหัก ณ ที่จ่าย', 'ภาษีกรอกเอง?', 'กองทุนสำรองฯ', 'เบิกล่วงหน้า', 'เงินกู้', 'หักอื่น',
-      'รวมรายการหัก', 'เงินได้สุทธิ (โอน)', 'ประกันสังคม (ร้านสมทบ)', 'เงินได้ทั้งปี (ประมาณการ)', 'เงินได้สุทธิฐานภาษี', 'ภาษีทั้งปี', 'หมายเหตุ'];
+      'รวมรายการหัก', 'เงินได้สุทธิ (โอน)', 'ประกันสังคม (ร้านสมทบ)', 'เงินได้ทั้งปี (ประมาณการ)', 'เงินได้สุทธิฐานภาษี', 'ภาษีทั้งปี', 'หมายเหตุ', 'Service charge (จ่ายวันที่ ' + data.scPayDate + ')', 'ทิป', 'ภาษี SC/ทิป', 'สุทธิ SC/ทิป (โอน)'];
     var txt = function (v) { return v ? '="' + v + '"' : ''; };
     var rows = [head].concat(data.rows.map(function (r) {
       return [data.month, r.empId, r.name, txt(r.nationalId), r.bankName, txt(r.bankAccount), r.position, r.department, r.payType === 'daily' ? 'รายวัน' : 'รายเดือน', r.wage, r.employedDays, r.workDays,
         r.workedDays, r.absentDays, r.paidLeaveDays, r.unpaidLeaveDays, r.paidHolidayDays, r.lateMin, r.earlyMin, r.otMin, r.holidayWorkMin, r.holidayOtMin,
-        r.base, r.positionAllowance, r.fixedAllowance, r.otPay, r.attBonus, r.meal, r.serviceCharge, r.tips, r.bonus, r.otherIncome, r.income,
+        r.base, r.positionAllowance, r.fixedAllowance, r.otPay, r.attBonus, r.meal, r.bonus, r.otherIncome, r.income,
         r.absenceDeduct, r.lateDeduct, r.ssoWage, r.sso, r.tax, r.taxManual ? 'กรอกเอง' : 'อัตโนมัติ', r.pvd, r.advance, r.loan, r.otherDeduct,
-        r.deductions, r.net, r.sso, Math.round(r.taxInfo.income * 100) / 100, Math.round(r.taxInfo.net * 100) / 100, r.taxInfo.tax, r.note];
+        r.deductions, r.net, r.sso, Math.round(r.taxInfo.income * 100) / 100, Math.round(r.taxInfo.net * 100) / 100, r.taxInfo.tax, r.note, (r.sc || {}).serviceCharge || 0, (r.sc || {}).tips || 0, (r.sc || {}).tax || 0, (r.sc || {}).net || 0];
     }));
     var t = sum(data.rows), blank = function (n) { return new Array(n).fill(''); };
-    rows.push(['รวม', '', t.count + ' คน'].concat(blank(19)).concat([t.base, t.positionAllowance, t.fixedAllowance, t.otPay, t.attBonus, t.meal, t.serviceCharge, t.tips, t.bonus, t.otherIncome, t.income,
-      t.absenceDeduct, t.lateDeduct, '', t.sso, t.tax, '', t.pvd, t.advance, t.loan, t.otherDeduct, t.deductions, t.net, t.sso, '', '', '', '']).map(function (x) { return typeof x === 'number' ? Math.round(x * 100) / 100 : x; }));
-    rows.push([]); rows.push(['สรุปนำส่ง']); rows.push(['ยอดโอนเงินเดือน', Math.round(t.net * 100) / 100]); rows.push(['ประกันสังคม 2 ฝ่าย (ภายในวันที่ 15 เดือนถัดไป)', t.sso * 2]);
+    rows.push(['รวม', '', t.count + ' คน'].concat(blank(19)).concat([t.base, t.positionAllowance, t.fixedAllowance, t.otPay, t.attBonus, t.meal, t.bonus, t.otherIncome, t.income,
+      t.absenceDeduct, t.lateDeduct, '', t.sso, t.tax, '', t.pvd, t.advance, t.loan, t.otherDeduct, t.deductions, t.net, t.sso, '', '', '', ''].concat(['serviceCharge', 'tips', 'tax', 'net'].map(function (k) { return data.rows.reduce(function (a, r) { return a + (+(r.sc || {})[k] || 0); }, 0); }))).map(function (x) { return typeof x === 'number' ? Math.round(x * 100) / 100 : x; }));
+    rows.push([]); rows.push(['สรุปนำส่ง']); rows.push(['ยอดโอนเงินเดือน (วันที่ 25)', Math.round(t.net * 100) / 100]);
+    var scNet = data.rows.reduce(function (a, r) { return a + (+(r.sc || {}).net || 0); }, 0); if (scNet) rows.push(['ยอดโอน Service charge & ทิป (วันที่ ' + data.scPayDate + ')', Math.round(scNet * 100) / 100]); rows.push(['ประกันสังคม 2 ฝ่าย (ภายในวันที่ 15 เดือนถัดไป)', t.sso * 2]);
     rows.push(['ภาษี ภ.ง.ด.1 (ภายในวันที่ 7 เดือนถัดไป / ออนไลน์ 15)', Math.round(t.tax * 100) / 100]); if (t.pvd) rows.push(['กองทุนสำรองเลี้ยงชีพ (ส่วนพนักงาน)', t.pvd]);
     App.downloadCSV('TheSparrow_เงินเดือน_' + data.month + '.csv', rows);
   }
@@ -252,7 +266,9 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
           '<div class="stat"><div class="n">' + d.count + '</div><div class="l">ราย (ผู้มีเงินได้)</div></div>' +
           '<div class="stat"><div class="n">฿' + App.num(d.totalIncome) + '</div><div class="l">เงินได้ทั้งสิ้น</div></div>' +
           '<div class="stat info"><div class="n">฿' + App.num(d.totalTax, 2) + '</div><div class="l">ภาษีที่นำส่ง</div></div></div>' +
-          '<p class="sub">เงินได้ตามมาตรา 40(1) · วันที่จ่าย 25 ' + App.monthTH(d.month) + ' · กำหนดยื่นภายในวันที่ 7 ' + next + ' (ยื่นออนไลน์ถึงวันที่ 15)</p>' +
+          '<p class="sub">เงินได้ตามมาตรา 40(1) ที่จ่ายในเดือน ' + App.monthTH(d.month) + ': เงินเดือน (จ่าย ' + App.dateTH(d.payDate) + ')' + (d.totalSc ? ' + Service charge & ทิป งวด ' + App.monthTH(d.scMonth) + ' (จ่าย ' + App.dateTH(d.scPayDate) + ') ฿' + App.num(d.totalSc, 2) : '') +
+            ' · ' + d.lines + ' บรรทัด ' + d.count + ' ราย · กำหนดยื่นภายในวันที่ 7 ' + next + ' (ยื่นออนไลน์ถึงวันที่ 15)</p>' +
+          (d.scSource === 'live' ? '<div class="warnbox">ยังไม่ได้ส่งสลิป Service charge & ทิป งวด ' + App.monthTH(d.scMonth) + ' — ตัวเลข SC มาจากการคำนวณปัจจุบัน</div>' : '') +
           (d.source === 'live' ? '<div class="warnbox">เดือนนี้ยังไม่ได้ส่งสลิป ตัวเลขมาจากการคำนวณปัจจุบัน — แนะนำให้ส่งสลิปก่อนยื่นจริง เพื่อให้ตรงกับสลิปของพนักงาน</div>' : '<p class="sub">✓ ตัวเลขจากสลิปที่ส่งแล้ว</p>') +
           (!d.payer.taxId ? '<div class="warnbox">ยังไม่ได้ใส่เลขประจำตัวผู้เสียภาษีของร้าน (หน้าตั้งค่า → ร้าน)</div>' : '') +
           (noId ? '<div class="warnbox">มีพนักงาน ' + noId + ' คนยังไม่มีเลขบัตรประชาชน 13 หลัก (แฟ้มพนักงาน → ข้อมูลอ่อนไหว)</div>' : '') +
@@ -308,6 +324,11 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
       this.disabled = true;
       App.call('payrollPublish', { month: data.month }).then(function (r) { App.toast('ส่งสลิปให้พนักงาน ' + r.count + ' คนแล้ว'); m.close(); load(); }).catch(function () { m.close(); });
     };
+  }
+  function publishSc() {
+    var n = data.rows.filter(function (r) { return r.sc && r.sc.income > 0; }).length, again = !!data.scPublished;
+    if (!confirm((again ? 'ส่งอีกครั้ง (แทนที่ของเดิม): ' : '') + 'ส่งสลิป Service charge & ทิป ' + App.monthTH(data.month) + ' ให้พนักงาน ' + n + ' คน · โอนวันที่ ' + App.dateTH(data.scPayDate) + '?')) return;
+    App.call('payrollPublishSc', { month: data.month }).then(function (r) { App.toast('ส่งสลิป SC & ทิป ให้ ' + r.count + ' คนแล้ว'); load(); }).catch(function () {});
   }
   function unpublish() {
     if (!confirm('ยกเลิกการส่งสลิปเดือนนี้? พนักงานจะไม่เห็นสลิปเดือนนี้อีกจนกว่าจะส่งใหม่')) return;
