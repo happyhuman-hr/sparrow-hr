@@ -66,7 +66,21 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
 
   function m2(x) { return (+x || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function dash(x, neg) { return +x ? (neg ? '−' : '') + m2(x) : '-'; }
-  function load() { App.loading(wrap); App.call('payroll', { month: month }).then(function (d) { data = d; render(); }).catch(function () {}); }
+  /**
+   * เปิดหน้าเร็ว: แสดงตัวเลขรอบก่อนของเดือนนี้ (เก็บไว้ในแท็บนี้เท่านั้น ปิดแท็บแล้วหาย) ทันที แล้วโหลดตัวเลขล่าสุดมาแทน
+   * ระหว่างรอ ปุ่มส่งสลิป / ช่องกรอก ถูกปิดไว้ กันใช้ตัวเลขเก่า
+   */
+  var PAY_KEY = 'hris-pay-';
+  function cacheGet(m) { try { var x = JSON.parse(sessionStorage.getItem(PAY_KEY + m) || 'null'); return x && x.month === m ? x : null; } catch (e) { return null; } }
+  function cachePut(d) {   // ไม่เก็บเลขบัตรประชาชน / เลขบัญชี (ใช้แค่ตอนส่งออก CSV ซึ่งรอข้อมูลจริงก่อน)
+    try { sessionStorage.setItem(PAY_KEY + d.month, JSON.stringify(Object.assign({}, d, { rows: d.rows.map(function (r) { return Object.assign({}, r, { nationalId: '', bankAccount: '' }); }) }))); } catch (e) { /* เต็ม / ปิดไว้ ไม่เป็นไร */ }
+  }
+  function show(d) { data = d; cachePut(d); var y = window.scrollY, x = (App.$('.tbl-wrap') || {}).scrollLeft; render(); window.scrollTo(0, y); if (App.$('.tbl-wrap') && x) App.$('.tbl-wrap').scrollLeft = x; }
+  function load() {
+    var want = month, old = cacheGet(want);
+    if (old) { data = Object.assign(old, { _stale: true }); render(); } else App.loading(wrap);
+    App.call('payroll', { month: want }).then(function (d) { if (want !== month) return; data = d; cachePut(d); render(); }).catch(function () {});
+  }
   var KEYS = ['base', 'positionAllowance', 'fixedAllowance', 'otPay', 'attBonus', 'meal', 'serviceCharge', 'tips', 'bonus', 'otherIncome', 'income', 'absenceDeduct', 'lateDeduct',
               'sso', 'tax', 'pvd', 'advance', 'loan', 'otherDeduct', 'deductions', 'net'];
   function sum(rows) { var t = {}; KEYS.forEach(function (k) { t[k] = rows.reduce(function (a, r) { return a + (+r[k] || 0); }, 0); }); t.count = rows.length; return t; }
@@ -130,6 +144,10 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
       remittance(t) +
       '<p class="sub">ตรวจสอบตัวเลขก่อนจ่ายจริงทุกครั้ง · ภาษีเป็นการประมาณการทั้งปีแบบเดียวกับไฟล์ตัวอย่าง กรณีเข้า-ออกกลางปีหรือมีเงินได้จากนายจ้างเดิม ให้สำนักงานบัญชีตรวจและกรอกภาษีเอง</p>';
 
+    if (data._stale) {
+      wrap.insertAdjacentHTML('afterbegin', '<div class="no-print sub" style="background:var(--info-soft,#eef3fb);border-radius:10px;padding:8px 12px;margin-bottom:10px">⏳ กำลังอัปเดตตัวเลขล่าสุด… (ตอนนี้แสดงตัวเลขที่เปิดดูครั้งก่อน)</div>');
+      App.$$('#pub, #pubSc, #poolSave, #pnd1, #pnd1a, #csv, tr[data-i] input, [data-slip]', wrap).forEach(function (el) { el.disabled = true; });
+    }
     App.$('#pm').onclick = function () { month = App.addMonths(month, -1); load(); };
     App.$('#nm').onclick = function () { month = App.addMonths(month, 1); load(); };
     App.$('#csv').onclick = exportCsv;
@@ -139,9 +157,9 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
     App.$('#pnd1a').onclick = function () { pnd1a(+data.month.slice(0, 4)); };
     App.$('#poolSave').onclick = function () {
       var btn = this; btn.disabled = true;
-      App.call('servicePoolSave', { month: data.month, serviceCharge: App.$('#poolSc').value, tips: App.$('#poolTips').value })
-        .then(function () { return App.call('payroll', { month: data.month }); })
-        .then(function (d) { data = d; render(); App.toast('แบ่ง Service charge / ทิป แล้ว' + (data.published ? ' — อย่าลืมกดส่งสลิปอีกครั้ง' : '')); })
+      App.call('servicePoolSave', { month: data.month, serviceCharge: App.$('#poolSc').value, tips: App.$('#poolTips').value, reload: true })
+        .then(function (r) { return r && r.report ? r.report : App.call('payroll', { month: data.month }); })
+        .then(function (d) { show(d); App.toast('แบ่ง Service charge / ทิป แล้ว' + (data.published ? ' — อย่าลืมกดส่งสลิปอีกครั้ง' : '')); })
         .catch(function () { btn.disabled = false; });
     };
     if (App.$('#unpub')) App.$('#unpub').onclick = function (e) { e.preventDefault(); unpublish(); };
@@ -226,9 +244,10 @@ App.boot({ page: 'payroll', role: 'hr', ready: function (me) {
     var r = data.rows[+tr.getAttribute('data-i')], values = {};
     App.$$('input', tr).forEach(function (el) { values[el.getAttribute('data-k')] = el.value; });
     tr.classList.add('saving');
-    App.call('payrollAdjust', { month: data.month, empId: r.empId, values: values }).then(function () {
-      return App.call('payroll', { month: data.month });
-    }).then(function (d) { data = d; var y = window.scrollY, x = (App.$('.tbl-wrap') || {}).scrollLeft; render(); window.scrollTo(0, y); if (App.$('.tbl-wrap')) App.$('.tbl-wrap').scrollLeft = x; App.toast('บันทึกแล้ว'); })
+    // บันทึก + คำนวณใหม่ในคำขอเดียว (เซิร์ฟเวอร์รุ่นเก่าไม่ส่ง report กลับ → เรียกซ้ำแบบเดิม)
+    App.call('payrollAdjust', { month: data.month, empId: r.empId, values: values, reload: true }).then(function (res) {
+      return res && res.report ? res.report : App.call('payroll', { month: data.month });
+    }).then(function (d) { show(d); App.toast('บันทึกแล้ว'); })
       .catch(function () { tr.classList.remove('saving'); });
   }
 
