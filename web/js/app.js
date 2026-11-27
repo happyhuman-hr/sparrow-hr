@@ -235,7 +235,7 @@
     var old = $('#notif'); if (old) { old.remove(); return; }
     var d = notifData || { items: [], results: [], news: [], fresh: [] }, isNew = function (x) { return d.fresh.indexOf(x.id + x.kind + (x.status || '')) >= 0; };
     function row(x) {
-      var href = x.kind === 'slip' ? link('payslip.html') + (link('payslip.html').indexOf('?') > 0 ? '&' : '?') + 'month=' + x.slipMonth : x.kind === 'news' ? link('news.html') + '#' + x.newsId : x.kind === 'result' ? link('my.html') : link('approve.html') + (link('approve.html').indexOf('?') > 0 ? '&' : '?') + 'id=' + x.id;
+      var href = x.kind === 'slip' ? link('payslip.html') + (link('payslip.html').indexOf('?') > 0 ? '&' : '?') + 'month=' + x.slipMonth + (x.slipKind ? '&kind=' + x.slipKind : '') : x.kind === 'news' ? link('news.html') + '#' + x.newsId : x.kind === 'result' ? link('my.html') : link('approve.html') + (link('approve.html').indexOf('?') > 0 ? '&' : '?') + 'id=' + x.id;
       return '<a class="ni' + (isNew(x) ? ' new' : '') + '" href="' + href + '"><span class="ic">' + (x.kind === 'slip' ? '💰' : x.kind === 'news' ? '📣' : x.kind === 'leave' ? '📝' : x.kind === 'ot' ? '⏱' : x.status === 'approved' ? '✓' : '✕') + '</span>' +
         '<span style="flex:1;min-width:0"><b>' + esc(x.title) + '</b><div class="sub">' + esc(x.detail) + (x.warn ? ' · ⚠️ มีคำเตือน' : '') + '</div><div class="sub">' + esc(String(x.at || '').slice(0, 16)) + '</div></span></a>';
     }

@@ -11,7 +11,7 @@
   App.pnd1Csv = function (d) {
     var rows = [['ลำดับที่', 'เลขประจำตัวผู้เสียภาษีอากร (ผู้มีเงินได้)', 'คำนำหน้าชื่อ', 'ชื่อ', 'ชื่อสกุล', 'วันเดือนปีที่จ่าย', 'จำนวนเงินได้ที่จ่ายในครั้งนี้', 'จำนวนเงินภาษีที่หักและนำส่งในครั้งนี้', 'เงื่อนไข', 'รหัสพนักงาน']];
     d.list.forEach(function (x) {
-      rows.push([x.seq, x.taxId ? '="' + x.taxId + '"' : '', x.prefix, x.firstName, x.lastName, beDate(d.payDate), x.income.toFixed(2), x.tax.toFixed(2), x.condition, x.empId]);
+      rows.push([x.seq, x.taxId ? '="' + x.taxId + '"' : '', x.prefix, x.firstName, x.lastName, beDate(x.payDate || d.payDate), x.income.toFixed(2), x.tax.toFixed(2), x.condition, x.empId]);
     });
     rows.push([]);
     rows.push(['รวม', '', '', d.count + ' ราย', '', '', d.totalIncome.toFixed(2), d.totalTax.toFixed(2)]);
@@ -108,7 +108,7 @@
         '<table class="t"><thead><tr><th>ลำดับที่</th><th>เลขประจำตัวผู้เสียภาษีอากร (ของผู้มีเงินได้)</th><th>ชื่อผู้มีเงินได้</th><th>วัน เดือน ปี ที่จ่าย</th><th>จำนวนเงินได้ที่จ่ายในครั้งนี้</th><th>จำนวนเงินภาษีที่หักและนำส่งในครั้งนี้</th><th>เงื่อนไข</th></tr></thead><tbody>' +
         rows.map(function (x) {
           return '<tr><td class="c">' + x.seq + '</td><td class="c">' + (x.taxId ? fmtId(x.taxId) : '<span class="blank">ยังไม่มีเลขบัตร</span>') + '</td><td>' + esc(x.prefix + x.firstName + ' ' + x.lastName) + '</td>' +
-            '<td class="c">' + beDate(d.payDate) + '</td><td class="n">' + m2(x.income) + '</td><td class="n">' + m2(x.tax) + '</td><td class="c">' + x.condition + '</td></tr>';
+            '<td class="c">' + beDate(x.payDate || d.payDate) + '</td><td class="n">' + m2(x.income) + '</td><td class="n">' + m2(x.tax) + '</td><td class="c">' + x.condition + '</td></tr>';
         }).join('') +
         '<tr class="tot"><td colspan="4" class="r">รวมยอดเงินได้และภาษีที่นำส่ง (นำไปรวมกับใบแนบ ภ.ง.ด.1 แผ่นอื่น ถ้ามี)</td><td class="n">' + m2(sub.i) + '</td><td class="n">' + m2(sub.t) + '</td><td></td></tr></tbody></table>' +
         '<div class="note">เงื่อนไข: 1 = หัก ณ ที่จ่าย · 2 = ออกให้ตลอดไป · 3 = ออกให้ครั้งเดียว</div>' +
