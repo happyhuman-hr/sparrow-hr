@@ -47,34 +47,67 @@ App.boot({ page: 'schedule', role: 'manager', ready: function (me) {
       }).join('') + '</tr></thead><tbody>' + d.employees.map(function (e) {
         var off = String(e.offDays || '').split(',').filter(Boolean).map(function (k) { return DOW[+k]; }).join(',');
         return '<tr><td><b>' + App.esc(e.name) + '</b><div class="sub">' + App.esc(e.position || '') + '</div>' +
-          '<div class="defs">ประจำ: <b>' + (e.defaultShift || '-') + '</b>' + (off ? ' · หยุด ' + off : '') + (e.halfDayOn !== '' ? ' · ครึ่งวัน' + DOW[+e.halfDayOn] : '') + (d.canEditDefault ? ' <a href="#" data-def="' + e.id + '">แก้</a>' : '') + '</div></td>' + d.days.map(function (x) {
+          '<div class="defs">ประจำ: <b>' + (e.defaultShift || '-') + '</b>' + (off ? ' · หยุด ' + off : '') + (e.halfDayOn !== '' ? ' · ครึ่งวัน' + DOW[+e.halfDayOn] : '') + (d.canEditDefault ? ' <a href="#" data-def="' + e.id + '">แก้</a>' : '') + '</div>' +
+          '<div class="off2" data-off2="' + e.id + '" style="margin-top:4px;font-size:12px"></div></td>' + d.days.map(function (x) {
           var v = d.cells[e.id + '|' + x] || '', inf = d.info[e.id + '|' + x], def = d.defaults[e.id + '|' + x] || '';
           var note = inf ? (inf.kind === 'holiday' ? 'หยุดตามประเพณี' : inf.kind === 'sub_off' ? 'หยุดชดเชย' : inf.leave ? inf.leave : inf.pending ? inf.pending : inf.holiday && inf.holiday.mode !== 'dayoff' ? 'ทำงานวันหยุด' : '') : '';
           var cur = v || def;
-          return '<td><select data-e="' + e.id + '" data-d="' + x + '" class="v-' + cur + (v ? ' manual' : '') + '" title="' + (v ? 'แก้รายวัน (กะประจำ: ' + label(def) + ')' : 'ตามกะประจำ') + '">' + opts(def).replace('value="' + v + '"', 'value="' + v + '" selected') + '</select>' + (note ? '<span class="note">' + App.esc(note) + '</span>' : '') + '</td>';
+          return '<td><select' + (d.canEdit ? '' : ' disabled') + ' data-e="' + e.id + '" data-d="' + x + '" class="v-' + cur + (v ? ' manual' : '') + '" title="' + (v ? 'แก้รายวัน (กะประจำ: ' + label(def) + ')' : 'ตามกะประจำ') + '">' + opts(def).replace('value="' + v + '"', 'value="' + v + '" selected') + '</select>' + (note ? '<span class="note">' + App.esc(note) + '</span>' : '') + '</td>';
         }).join('') + '</tr>';
       }).join('') + '</tbody></table></div>' +
       '<div class="row" style="margin-top:12px"><span class="sub">' + d.shifts.map(function (s) { return '<b>' + s.code + '</b> ' + s.start + '–' + s.end; }).join(' · ') + '</span><div class="spacer"></div>' +
-      '<button id="copy">คัดลอกจากสัปดาห์ก่อน</button><button class="accent" id="save" disabled>บันทึก</button></div>' +
-      '<p class="sub">ทุกช่องเริ่มจาก <b>กะประจำ</b> ของแต่ละคน (เจ้าของร้าน / HR ตั้งได้ที่ปุ่ม "แก้" ใต้ชื่อ หรือในแฟ้มพนักงาน) · ถ้าวันไหนเปลี่ยน เลือกกะใหม่เฉพาะวันนั้นได้ ช่องที่แก้รายวันจะมีกรอบสีไวน์ · เลือก "(ประจำ)" เพื่อกลับไปใช้กะประจำ</p>' +
-      '<p class="sub">ข้อบังคับฯ: หยุดวันจันทร์ 1 วัน + อีก 1 วันสลับระหว่างอังคาร–พฤหัสบดี · พนักงานเห็นกะของตัวเองในเมนู "ปฏิทิน"</p>';
+      (d.canEdit ? '<button id="copy">คัดลอกจากสัปดาห์ก่อน</button><button class="accent" id="save" disabled>บันทึก</button>' : '<span class="sub">ดูได้อย่างเดียว — ยังไม่ได้รับสิทธิ์จัดตารางเวร</span>') + '</div>' +
+      '<p class="sub">ทุกช่องเริ่มจาก <b>กะประจำ</b> ของแต่ละคน (ผู้มีสิทธิ์จัดตารางเวรตั้งได้ที่ปุ่ม "แก้" ใต้ชื่อ) · ถ้าวันไหนเปลี่ยน เลือกกะใหม่เฉพาะวันนั้นได้ ช่องที่แก้รายวันจะมีกรอบสีไวน์ · เลือก "(ประจำ)" เพื่อกลับไปใช้กะประจำ</p>' +
+      '<p class="sub">วันหยุดประจำสัปดาห์ 2 วัน (ค่าเริ่มต้น <b>วันจันทร์</b>) · กดปุ่มวัน จ–อา ใต้ชื่อเพื่อเลือก / ยกเลิกวันหยุดของสัปดาห์นี้ (ปุ่มสีไวน์ = หยุด) แล้วกดบันทึก · ถ้าจำนวนวันหยุดไม่ใช่ 2 วันจะขึ้น ⚠️ ไว้เตือน (ยังบันทึกได้ เผื่อสัปดาห์ที่มีวันหยุดตามประเพณี) · เปลี่ยนวันหยุดประจำทุกสัปดาห์ได้ที่ปุ่ม "แก้" · พนักงานเห็นกะของตัวเองในเมนู "ปฏิทิน"</p>';
     App.$$('[data-def]', body).forEach(function (a) { a.onclick = function (ev) { ev.preventDefault(); editDefault(d, d.employees.filter(function (e) { return e.id === a.getAttribute('data-def'); })[0]); }; });
     App.$$('select[data-e]', body).forEach(function (s) { s.onchange = function () {
       pending[s.getAttribute('data-e') + '|' + s.getAttribute('data-d')] = s.value; s.className = 'v-' + (s.value || d.defaults[s.getAttribute('data-e') + '|' + s.getAttribute('data-d')]) + (s.value ? ' manual' : '') + ' changed'; App.$('#save').disabled = false;
     }; });
+    // ---- วันหยุดประจำสัปดาห์: เลือกได้ จันทร์–อาทิตย์ (ปกติ 2 วัน · ค่าเริ่มต้นวันจันทร์มาจากวันหยุดประจำในแฟ้มพนักงาน)
+    var OFF_PER_WEEK = 2, TH3 = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+    var wd = function (x) { return new Date(x + 'T00:00:00Z').getUTCDay(); };
+    var sel = function (id, x) { return App.$('select[data-e="' + id + '"][data-d="' + x + '"]', body); };
+    var curVal = function (id, x) { var s = sel(id, x); return s ? (s.value || d.defaults[id + '|' + x] || '') : ''; };
+    function setCell(id, x, want) {   // want: 'OFF' หรือ 'WORK'
+      var s = sel(id, x); if (!s) return;
+      var def = d.defaults[id + '|' + x] || '', emp = d.employees.filter(function (e) { return e.id === id; })[0];
+      var v = want === 'OFF' ? (def === 'OFF' ? '' : 'OFF') : (def && def !== 'OFF' ? '' : (emp.defaultShift || (d.shifts[0] || {}).code || ''));
+      if (s.value === v) return;
+      s.value = v; s.onchange();
+    }
+    function paintOff2(id) {
+      var box = App.$('[data-off2="' + id + '"]', body); if (!box) return;
+      var emp = d.employees.filter(function (e) { return e.id === id; })[0] || {};
+      var offs = d.days.filter(function (x) { return curVal(id, x) === 'OFF'; }), n = offs.length;
+      var half = emp.halfDayOn !== '' && emp.halfDayOn !== undefined;   // แม่บ้าน 5.5 วัน: หยุด 1 วัน + ครึ่งวัน
+      var need = half ? 1 : OFF_PER_WEEK;
+      var warn = !n ? 'ยังไม่มีวันหยุด' : n < need ? 'เลือกวันหยุดอีก ' + (need - n) + ' วัน' : n > need ? 'หยุด ' + n + ' วัน (ปกติ ' + need + ' วัน)' : '';
+      box.innerHTML = 'วันหยุด: ' + (d.canEdit ? '<span style="display:inline-flex;flex-wrap:wrap;gap:2px;vertical-align:middle">' + d.days.map(function (x) {
+          return '<button type="button" class="sm' + (offs.indexOf(x) >= 0 ? ' accent' : '') + '" data-pick="' + id + '|' + x + '" style="padding:2px 6px;min-height:0">' + TH3[wd(x)] + '</button>';
+        }).join('') + '</span>' : '<b>' + (offs.map(function (x) { return TH3[wd(x)]; }).join(', ') || '-') + '</b>') +
+        (warn ? ' <span style="color:var(--bad,#b42318)">⚠️ ' + warn + '</span>' : '');
+      App.$$('[data-pick]', box).forEach(function (b) { b.onclick = function () {
+        var p = b.getAttribute('data-pick').split('|');
+        setCell(p[0], p[1], curVal(p[0], p[1]) === 'OFF' ? 'WORK' : 'OFF');
+        paintOff2(p[0]);
+      }; });
+    }
+    d.employees.forEach(function (e) { paintOff2(e.id); });
+    App.$$('select[data-e]', body).forEach(function (s) { var f = s.onchange; s.onchange = function () { f(); paintOff2(s.getAttribute('data-e')); }; });
+
     App.$('#pw').onclick = function () { if (leaveOk()) { week = App.addDays(week, -7); loadWeek(); } };
     App.$('#nw').onclick = function () { if (leaveOk()) { week = App.addDays(week, 7); loadWeek(); } };
-    App.$('#save').onclick = function () {
+    if (d.canEdit) App.$('#save').onclick = function () {
       var changes = Object.keys(pending).map(function (k) { var p = k.split('|'); return { empId: p[0], date: p[1], shift: pending[k] }; });
       this.disabled = true;
       App.call('scheduleSet', { changes: changes }).then(function () { App.toast('บันทึกตารางกะแล้ว'); loadWeek(); }).catch(function () { App.$('#save').disabled = false; });
     };
-    App.$('#copy').onclick = function () {
+    if (d.canEdit) App.$('#copy').onclick = function () {
       if (!confirm('คัดลอกกะจากสัปดาห์ก่อนมาทับสัปดาห์นี้?')) return;
       App.call('scheduleCopyWeek', { weekStart: week }).then(function (r) { App.toast('คัดลอก ' + r.count + ' ช่อง'); loadWeek(); }).catch(function () {});
     };
   }
-  /** ตั้งกะประจำ + วันหยุดประจำสัปดาห์ (เจ้าของร้าน / HR) */
+  /** ตั้งกะประจำ + วันหยุดประจำสัปดาห์ (เจ้าของร้าน / HR / หัวหน้างานที่มีสิทธิ์จัดตารางเวร) */
   function editDefault(d, e) {
     var DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'], on = String(e.offDays || '').split(',');
     var m = App.modal('กะประจำของ ' + e.name,

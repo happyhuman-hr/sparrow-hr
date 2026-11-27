@@ -38,7 +38,7 @@ App.boot({ page: 'employees', role: 'manager', ready: function (me) {
       ['department', 'แผนก', 'select', ['ครัว (BOH)', 'หน้าร้าน (FOH)', 'แม่บ้าน', 'บริหาร', 'HR', 'อื่น ๆ']], ['position', 'ตำแหน่ง', 'position'],
       ['startDate', 'วันเริ่มงาน *', 'date'], ['probationEnd', 'วันครบทดลองงาน', 'date'], ['status', 'สถานะการจ้าง', 'map', STATUS], ['payType', 'ประเภทการจ้าง', 'map', PAY],
       ['wage', 'ค่าจ้าง (บาท/เดือน หรือ บาท/วัน)', 'number'], ['supervisorId', 'ผู้บังคับบัญชา', 'sup'],
-      ['defaultShift', 'กะประจำ', 'shift'], ['offDays', 'วันหยุดประจำสัปดาห์', 'days'], ['halfDayOn', 'วันทำงานครึ่งวัน (กะ H 15:00–22:00)', 'map', { '1': 'จันทร์', '2': 'อังคาร', '3': 'พุธ', '4': 'พฤหัสบดี', '5': 'ศุกร์', '6': 'เสาร์', '0': 'อาทิตย์' }], ['role', 'สิทธิ์ในระบบ', 'map', ROLE], ['approveScope', 'หัวหน้างานอนุมัติได้', 'scope'], ['endDate', 'วันพ้นสภาพ', 'date'], ['note', 'หมายเหตุ', 'textarea']
+      ['defaultShift', 'กะประจำ', 'shift'], ['offDays', 'วันหยุดประจำสัปดาห์', 'days'], ['halfDayOn', 'วันทำงานครึ่งวัน (กะ H 15:00–22:00)', 'map', { '1': 'จันทร์', '2': 'อังคาร', '3': 'พุธ', '4': 'พฤหัสบดี', '5': 'ศุกร์', '6': 'เสาร์', '0': 'อาทิตย์' }], ['role', 'สิทธิ์ในระบบ', 'map', ROLE], ['approveScope', 'สิทธิ์ของหัวหน้างาน', 'scope'], ['endDate', 'วันพ้นสภาพ', 'date'], ['note', 'หมายเหตุ', 'textarea']
     ],
     pay: [
       ['positionAllowance', 'ค่าตำแหน่ง (บาท/เดือน)', 'number'], ['fixedAllowance', 'ค่าโทรศัพท์/เดินทางประจำ (บาท/เดือน)', 'number'],
@@ -98,9 +98,17 @@ App.boot({ page: 'employees', role: 'manager', ready: function (me) {
         (v && !known ? '<optgroup label="ตำแหน่งเดิม (ไม่อยู่ในรายการ)"><option selected>' + App.esc(v) + '</option></optgroup>' : '') + '</select>';
     }
     if (type === 'scope') {
-      var cur = String(v || '').toLowerCase(), opts = [['', 'ใบลาและ OT'], ['ot', 'OT อย่างเดียว'], ['leave', 'ใบลาอย่างเดียว']];
-      return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + '>' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
-        '<div class="sub">ใช้กับสิทธิ์ หัวหน้างาน เท่านั้น · อนุมัติเฉพาะลูกทีม (คนที่ใส่ชื่อนี้เป็นผู้บังคับบัญชา) · เรื่องที่อนุมัติไม่ได้จะไปรอเจ้าของร้าน / HR</div>';
+      // เก็บเป็น "leave,ot,schedule" · ว่าง (ค่าเดิม) = ได้ทุกเรื่อง · ไม่ติ๊กเลย = "none"
+      var cur = String(v || '').trim().toLowerCase(), all = !cur || cur === 'both' || cur === 'all';
+      var opts = [['leave', 'อนุมัติใบลา'], ['ot', 'อนุมัติ OT / ทำงานวันหยุด'], ['schedule', 'จัดตารางเวร / วันหยุดประจำสัปดาห์']];
+      var val = all ? 'leave,ot,schedule' : cur;
+      return lab + '<input type="hidden" id="f_' + k + '" data-k="' + k + '" value="' + App.esc(val) + '">' +
+        '<div class="scope-pick" style="display:grid;gap:6px">' + opts.map(function (o) {
+          var on = all || cur.split(/[\s,]+/).indexOf(o[0]) >= 0;
+          return '<label style="display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px"><input type="checkbox" style="width:auto" value="' + o[0] + '"' + (on ? ' checked' : '') + dis +
+            ' onchange="var w=this.closest(\'.scope-pick\'),h=document.getElementById(\'f_' + k + '\'),v=[].filter.call(w.querySelectorAll(\'input\'),function(x){return x.checked}).map(function(x){return x.value}).join(\',\');h.value=v||\'none\';">' + o[1] + '</label>';
+        }).join('') + '</div>' +
+        '<div class="sub">ใช้กับสิทธิ์ หัวหน้างาน เท่านั้น (เจ้าของร้าน / HR ทำได้ทุกเรื่องเสมอ) · อนุมัติใบลา / OT ได้เฉพาะลูกทีม (คนที่ใส่ชื่อนี้เป็นผู้บังคับบัญชา) · <b>จัดตารางเวร = จัดกะและวันหยุดประจำสัปดาห์ได้ทุกคนในร้าน</b> · เรื่องที่ไม่ได้ติ๊กจะไปรอเจ้าของร้าน / HR</div>';
     }
     if (type === 'sc') { var no = String(v) === '0'; return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + '><option value=""' + (no ? '' : ' selected') + '>ได้รับ (ตามจำนวนวันที่มาทำงาน)</option><option value="0"' + (no ? ' selected' : '') + '>ไม่ได้รับ</option></select>'; }
     if (type === 'shift') return lab + '<select id="f_' + k + '" data-k="' + k + '"' + dis + '><option value="">— ไม่กำหนด —</option>' + (data.shifts || []).map(function (s) { return '<option value="' + s.code + '"' + (s.code === v ? ' selected' : '') + '>' + s.code + ' · ' + s.start + '–' + s.end + '</option>'; }).join('') + '</select><div class="sub">ใช้เป็นค่าเริ่มต้นในตารางกะ แก้รายวันได้ที่หน้าตารางกะ</div>';
@@ -131,7 +139,7 @@ App.boot({ page: 'employees', role: 'manager', ready: function (me) {
   function fields(list, obj, ro) { return '<div class="grid g3">' + list.map(function (f) { return '<div class="field"' + (f[2] === 'textarea' ? ' style="grid-column:1/-1"' : '') + '>' + input(f, obj[f[0]], ro) + '</div>'; }).join('') + '</div>'; }
 
   function open(id) {
-    var p = id ? App.call('employeeGet', { id: id }) : Promise.resolve({ status: 'probation', payType: 'monthly', role: 'employee', nationality: 'ไทย', ethnicity: 'ไทย', sensitive: {} });
+    var p = id ? App.call('employeeGet', { id: id }) : Promise.resolve({ status: 'probation', payType: 'monthly', role: 'employee', nationality: 'ไทย', ethnicity: 'ไทย', offDays: '1', sensitive: {} });   // ค่าเริ่มต้น: หยุดวันจันทร์
     p.then(function (e) {
       var ro = !data.canEdit;
       var m = App.modal(id ? e.name : 'เพิ่มพนักงานใหม่',
